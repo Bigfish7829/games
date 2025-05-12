@@ -101,7 +101,6 @@ board_placeholder = st.empty()
 fig = draw_board()
 board_placeholder.pyplot(fig)
 
-st.write(f"Current position: {st.session_state.position}")
 if st.button("Roll Dice"):
     roll_dice(board_placeholder)
 
