@@ -17,27 +17,28 @@ import time
 
 def roll_dice(board_placeholder):
     roll = random.randint(1, 6)
-    initial_pos = st.session_state.position
-    new_pos = initial_pos + roll
-    new_pos = min(new_pos, 100)
+    new_pos = min(st.session_state.position + roll, 100)
 
     st.session_state.message = f"🎲 You rolled a {roll}"
     st.session_state.position = new_pos
 
-    # Draw move after dice roll
-    board_placeholder.pyplot(draw_board())
+    # Show move after roll
+    fig = draw_board()
+    board_placeholder.pyplot(fig)
     time.sleep(1)
 
-    # Check for snake or ladder
+    # Snake or ladder
     if new_pos in snakes:
-        st.session_state.message += f" 🐍 Oh no! Snake from {new_pos} to {snakes[new_pos]}"
+        st.session_state.message += f" 🐍 Snake from {new_pos} to {snakes[new_pos]}"
         st.session_state.position = snakes[new_pos]
     elif new_pos in ladders:
-        st.session_state.message += f" 🪜 Nice! Ladder from {new_pos} to {ladders[new_pos]}"
+        st.session_state.message += f" 🪜 Ladder from {new_pos} to {ladders[new_pos]}"
         st.session_state.position = ladders[new_pos]
 
-    # Final board update
-    board_placeholder.pyplot(draw_board())
+    # Show final move
+    fig = draw_board()
+    board_placeholder.pyplot(fig)
+
 
 
 def tile_coords(n):
@@ -93,7 +94,8 @@ def draw_board():
 st.title("🎲 Snakes and Ladders")
 
 board_placeholder = st.empty()
-board_placeholder.pyplot(draw_board())
+fig = draw_board()
+board_placeholder.pyplot(fig)
 
 st.write(f"Current position: {st.session_state.position}")
 if st.button("Roll Dice"):
