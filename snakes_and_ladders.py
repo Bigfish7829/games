@@ -9,7 +9,7 @@ ladders = {2: 38, 4: 14, 9: 31, 21: 42, 28: 84, 36: 44, 51: 67, 71: 91, 80: 100}
 
 # Setup session state
 if "position" not in st.session_state:
-    st.session_state.position = 0
+    st.session_state.position = 1
 if "message" not in st.session_state:
     st.session_state.message = ""
 
@@ -27,13 +27,17 @@ def roll_dice(board_placeholder):
     board_placeholder.pyplot(fig)
     time.sleep(1)
 
+    st.write(f"Current position: {st.session_state.position}")
+
     # Snake or ladder
     if new_pos in snakes:
-        st.session_state.message += f" 🐍 Snake from {new_pos} to {snakes[new_pos]}"
+        st.session_state.message += f" 🐍 Oh no! You no you didn't install eaves vents with your loft insualtion, you no have condensation and your rafters are rotting! Take a Snake from {new_pos} to {snakes[new_pos]}"
         st.session_state.position = snakes[new_pos]
     elif new_pos in ladders:
-        st.session_state.message += f" 🪜 Ladder from {new_pos} to {ladders[new_pos]}"
+        st.session_state.message += f" 🪜 Congratulations you installed dMEV and improved the indoor air quality. Take a ladder from {new_pos} to {ladders[new_pos]}"
         st.session_state.position = ladders[new_pos]
+
+    st.write(f"Current position: {st.session_state.position}")
 
     # Show final move
     fig = draw_board()
