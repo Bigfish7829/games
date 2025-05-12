@@ -2,59 +2,30 @@ import streamlit as st
 import matplotlib.pyplot as plt
 import numpy as np
 import random
+import time
+import copy
 
 # Define snakes and ladders
 snakes = {16: 6, 47: 26, 49: 11, 56: 53, 62: 19, 64: 60, 87: 24, 93: 73, 95: 75, 98: 78}
 ladders = {2: 38, 4: 14, 9: 31, 21: 42, 28: 84, 36: 44, 51: 67, 71: 91, 80: 100}
 
-# Setup session state
+# Session state
 if "position" not in st.session_state:
     st.session_state.position = 1
 if "message" not in st.session_state:
     st.session_state.message = ""
 
-import time
-
-def roll_dice(board_placeholder):
-    roll = random.randint(1, 6)
-    new_pos = min(st.session_state.position + roll, 100)
-
-    st.session_state.message = f"🎲 You rolled a {roll}"
-    st.session_state.position = new_pos
-
-    # Show move after roll
-    fig = draw_board()
-    board_placeholder.pyplot(fig)
-    time.sleep(1)
-
-    # Snake or ladder
-    if new_pos in snakes:
-        st.session_state.message += f" 🐍 Oh no! You no you didn't install eaves vents with your loft insualtion, you no have condensation and your rafters are rotting! Take a Snake from {new_pos} to {snakes[new_pos]}"
-        st.session_state.position = snakes[new_pos]
-    elif new_pos in ladders:
-        st.session_state.message += f" 🪜 Congratulations you installed dMEV and improved the indoor air quality. Take a ladder from {new_pos} to {ladders[new_pos]}"
-        st.session_state.position = ladders[new_pos]
-
-    st.write(f"Current position: {st.session_state.position}")
-
-    # Show final move
-    fig = draw_board()
-    board_placeholder.pyplot(fig)
-
-
-
+# Convert tile number to coordinates
 def tile_coords(n):
-    row = (n - 1) // 10  # 0 (bottom) to 9 (top)
+    row = (n - 1) // 10
     col = (n - 1) % 10
-    y = row  # bottom to top
-    if row % 2 == 0:
-        x = col  # left to right
-    else:
-        x = 9 - col  # right to left
+    y = row
+    x = col if row % 2 == 0 else 9 - col
     return x, y
 
-# Draw board using matplotlib
-def draw_board():
+# Cached base board (checkerboard, snakes, ladders, numbers)
+@st.cache_resource
+def get_base_board():
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.set_xlim(-0.5, 9.5)
     ax.set_ylim(-0.5, 9.5)
@@ -62,57 +33,36 @@ def draw_board():
     ax.set_yticks([])
     ax.set_aspect('equal')
 
-    # Draw colored squares
+    # Draw squares
     for i in range(1, 101):
         x, y = tile_coords(i)
-        color = '#f0d9b5' if (x + y) % 2 == 0 else '#b58863'  # light/dark checkerboard
+        color = '#f0d9b5' if (x + y) % 2 == 0 else '#b58863'
         rect = plt.Rectangle((x - 0.5, y - 0.5), 1, 1, facecolor=color, edgecolor='black')
         ax.add_patch(rect)
         ax.text(x, y, str(i), ha='center', va='center', fontsize=8, color='black')
 
-    # Draw snakes
-    import numpy as np  # Make sure this is imported at the top of your file
-
-    # Draw snakes as wavy lines
+    # Snakes as wavy yellow lines
     for start, end in snakes.items():
         x1, y1 = tile_coords(start)
         x2, y2 = tile_coords(end)
-    
-        # Number of snake segments (more = smoother snake)
         segments = 100
-    
-        # Create a linear path between start and end
         x = np.linspace(x1, x2, segments)
         y = np.linspace(y1, y2, segments)
-    
-        # Add sinusoidal wiggle to x/y to simulate a curvy snake
-        wiggle_amplitude = 0.15
-        wiggle = np.sin(np.linspace(0, 4 * np.pi, segments)) * wiggle_amplitude
-    
-        # Rotate wiggle perpendicular to the path direction
-        dx = x2 - x1
-        dy = y2 - y1
+        wiggle = np.sin(np.linspace(0, 4 * np.pi, segments)) * 0.15
+        dx, dy = x2 - x1, y2 - y1
         length = np.hypot(dx, dy)
-        ux = -dy / length  # perpendicular unit vector
-        uy = dx / length
-    
+        ux, uy = -dy / length, dx / length
         x_snake = x + wiggle * ux
         y_snake = y + wiggle * uy
-    
-        ax.plot(x_snake, y_snake, color='red', linewidth=2)
+        ax.plot(x_snake, y_snake, color='yellow', linewidth=3)
 
-
-    # Draw ladders as actual ladders
+    # Ladders as rails and rungs
     for start, end in ladders.items():
         x1, y1 = tile_coords(start)
         x2, y2 = tile_coords(end)
-    
-        # Ladder rails - slightly offset
         dx = 0.15
         ax.plot([x1 - dx, x2 - dx], [y1, y2], color='green', linewidth=2)
         ax.plot([x1 + dx, x2 + dx], [y1, y2], color='green', linewidth=2)
-    
-        # Draw rungs
         num_rungs = int(((y2 - y1)**2 + (x2 - x1)**2)**0.5 / 0.2)
         for i in range(1, num_rungs):
             t = i / num_rungs
@@ -120,21 +70,43 @@ def draw_board():
             rung_y = (1 - t) * y1 + t * y2
             ax.plot([rung_x - dx, rung_x + dx], [rung_y, rung_y], color='green', linewidth=1)
 
+    return fig
 
-    # Draw player
+# Redraw with player marker only
+def draw_board_with_player():
+    fig = copy.deepcopy(get_base_board())
+    ax = fig.axes[0]
     if st.session_state.position > 0:
         x, y = tile_coords(st.session_state.position)
         ax.plot(x, y, 'o', color='blue', markersize=15)
-
     return fig
 
+# Game logic
+def roll_dice(board_placeholder):
+    roll = random.randint(1, 6)
+    new_pos = min(st.session_state.position + roll, 100)
+
+    st.session_state.message = f"🎲 You rolled a {roll}"
+    st.session_state.position = new_pos
+    board_placeholder.pyplot(draw_board_with_player())
+    time.sleep(1)
+
+    # Snakes and ladders logic
+    if new_pos in snakes:
+        st.session_state.message += f" 🐍 Oh no! You didn’t install eaves vents with your loft insulation, you now have condensation and your rafters are rotting! Slip from {new_pos} to {snakes[new_pos]}"
+        st.session_state.position = snakes[new_pos]
+    elif new_pos in ladders:
+        st.session_state.message += f" 🪜 Congratulations! You installed dMEV and improved indoor air quality. Climb from {new_pos} to {ladders[new_pos]}"
+        st.session_state.position = ladders[new_pos]
+
+    st.write(f"Current position: {st.session_state.position}")
+    board_placeholder.pyplot(draw_board_with_player())
 
 # Streamlit UI
-st.title("🎲 Snakes and Ladders")
+st.title("🎲 Retrofit Wins and Banana Skins")
 
 board_placeholder = st.empty()
-fig = draw_board()
-board_placeholder.pyplot(fig)
+board_placeholder.pyplot(draw_board_with_player())
 
 if st.button("Roll Dice"):
     roll_dice(board_placeholder)
@@ -142,7 +114,7 @@ if st.button("Roll Dice"):
 st.info(st.session_state.message)
 
 if st.session_state.position == 100:
-    st.success("🏁 You've reached the end! Click 'Roll Dice' to restart.")
+    st.success("🏁 You've reached Net Zero! Click 'Roll Dice' to restart.")
     if st.button("Restart"):
-        st.session_state.position = 0
+        st.session_state.position = 1
         st.session_state.message = ""
