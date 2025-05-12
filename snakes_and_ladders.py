@@ -71,18 +71,55 @@ def draw_board():
         ax.text(x, y, str(i), ha='center', va='center', fontsize=8, color='black')
 
     # Draw snakes
+    import numpy as np  # Make sure this is imported at the top of your file
+
+    # Draw snakes as wavy lines
     for start, end in snakes.items():
         x1, y1 = tile_coords(start)
         x2, y2 = tile_coords(end)
-        ax.annotate('', xy=(x2, y2), xytext=(x1, y1),
-                    arrowprops=dict(arrowstyle="->", color='red', lw=2))
+    
+        # Number of snake segments (more = smoother snake)
+        segments = 100
+    
+        # Create a linear path between start and end
+        x = np.linspace(x1, x2, segments)
+        y = np.linspace(y1, y2, segments)
+    
+        # Add sinusoidal wiggle to x/y to simulate a curvy snake
+        wiggle_amplitude = 0.15
+        wiggle = np.sin(np.linspace(0, 4 * np.pi, segments)) * wiggle_amplitude
+    
+        # Rotate wiggle perpendicular to the path direction
+        dx = x2 - x1
+        dy = y2 - y1
+        length = np.hypot(dx, dy)
+        ux = -dy / length  # perpendicular unit vector
+        uy = dx / length
+    
+        x_snake = x + wiggle * ux
+        y_snake = y + wiggle * uy
+    
+        ax.plot(x_snake, y_snake, color='red', linewidth=2)
 
-    # Draw ladders
+
+    # Draw ladders as actual ladders
     for start, end in ladders.items():
         x1, y1 = tile_coords(start)
         x2, y2 = tile_coords(end)
-        ax.annotate('', xy=(x2, y2), xytext=(x1, y1),
-                    arrowprops=dict(arrowstyle="->", color='green', lw=2))
+    
+        # Ladder rails - slightly offset
+        dx = 0.15
+        ax.plot([x1 - dx, x2 - dx], [y1, y2], color='green', linewidth=2)
+        ax.plot([x1 + dx, x2 + dx], [y1, y2], color='green', linewidth=2)
+    
+        # Draw rungs
+        num_rungs = int(((y2 - y1)**2 + (x2 - x1)**2)**0.5 / 0.2)
+        for i in range(1, num_rungs):
+            t = i / num_rungs
+            rung_x = (1 - t) * x1 + t * x2
+            rung_y = (1 - t) * y1 + t * y2
+            ax.plot([rung_x - dx, rung_x + dx], [rung_y, rung_y], color='green', linewidth=1)
+
 
     # Draw player
     if st.session_state.position > 0:
