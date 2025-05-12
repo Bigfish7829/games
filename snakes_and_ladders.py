@@ -27,8 +27,6 @@ def roll_dice(board_placeholder):
     board_placeholder.pyplot(fig)
     time.sleep(1)
 
-    st.write(f"Current position: {st.session_state.position}")
-
     # Snake or ladder
     if new_pos in snakes:
         st.session_state.message += f" 🐍 Oh no! You no you didn't install eaves vents with your loft insualtion, you no have condensation and your rafters are rotting! Take a Snake from {new_pos} to {snakes[new_pos]}"
