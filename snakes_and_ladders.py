@@ -5,8 +5,8 @@ import random
 import time
 import copy
 
-# Define snakes, ladders, and chance tiles
-snakes = {16: 6, 47: 26, 49: 11, 56: 53, 62: 19, 64: 60, 87: 24, 93: 73, 95: 75, 98: 78}
+# Define default snakes, ladders, and chance tiles
+default_snakes = {16: 6, 47: 26, 49: 11, 56: 53, 62: 19, 64: 60, 87: 24, 93: 73, 95: 75, 98: 78}
 ladders = {2: 38, 4: 14, 9: 31, 21: 42, 28: 84, 36: 44, 51: 67, 71: 91, 80: 100}
 chance_tiles = [i for i in range(6, 101, 6)]
 
@@ -21,6 +21,8 @@ if "awaiting_chance_answer" not in st.session_state:
     st.session_state.awaiting_chance_answer = False
 if "chance_roll_pending" not in st.session_state:
     st.session_state.chance_roll_pending = False
+if "snakes" not in st.session_state:
+    st.session_state.snakes = default_snakes.copy()
 
 # Convert tile number to coordinates
 def tile_coords(n):
@@ -30,7 +32,7 @@ def tile_coords(n):
     x = col if row % 2 == 0 else 9 - col
     return x, y
 
-# Base board (checkerboard, snakes, ladders, numbers)
+# Base board (checkerboard, ladders, numbers)
 def get_base_board():
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.set_xlim(-0.5, 9.5)
@@ -51,21 +53,6 @@ def get_base_board():
     for i in chance_tiles:
         x, y = tile_coords(i)
         ax.text(x, y, "?", ha='center', va='center', fontsize=14, color='red', weight='bold')
-
-    # Snakes as wavy yellow lines
-    for start, end in snakes.items():
-        x1, y1 = tile_coords(start)
-        x2, y2 = tile_coords(end)
-        segments = 100
-        x = np.linspace(x1, x2, segments)
-        y = np.linspace(y1, y2, segments)
-        wiggle = np.sin(np.linspace(0, 4 * np.pi, segments)) * 0.15
-        dx, dy = x2 - x1, y2 - y1
-        length = np.hypot(dx, dy)
-        ux, uy = -dy / length, dx / length
-        x_snake = x + wiggle * ux
-        y_snake = y + wiggle * uy
-        ax.plot(x_snake, y_snake, color='yellow', linewidth=3)
 
     # Ladders as rails and rungs
     for start, end in ladders.items():
@@ -106,9 +93,9 @@ def roll_dice(board_placeholder, free_roll=False):
     time.sleep(1)
 
     # Snakes and ladders logic
-    if new_pos in snakes:
-        st.session_state.message += f" 🐍 Oh no! You didn’t install eaves vents with your loft insulation, you now have condensation and your rafters are rotting! Slip from {new_pos} to {snakes[new_pos]}"
-        st.session_state.position = snakes[new_pos]
+    if new_pos in st.session_state.snakes:
+        st.session_state.message += f" 🐍 Oh no! You didn’t install eaves vents with your loft insulation, you now have condensation and your rafters are rotting! Slip from {new_pos} to {st.session_state.snakes[new_pos]}"
+        st.session_state.position = st.session_state.snakes[new_pos]
     elif new_pos in ladders:
         st.session_state.message += f" 🪜 Congratulations! You installed dMEV and improved indoor air quality. Climb from {new_pos} to {ladders[new_pos]}"
         st.session_state.position = ladders[new_pos]
@@ -140,9 +127,9 @@ if st.session_state.awaiting_chance_answer:
             st.success("Correct! You get a free roll.")
 
             # Remove the snake with the highest start tile
-            if snakes:
-                highest_snake = max(snakes)
-                del snakes[highest_snake]
+            if st.session_state.snakes:
+                highest_snake = max(st.session_state.snakes)
+                del st.session_state.snakes[highest_snake]
                 st.info(f"🎉 The banana skin from tile {highest_snake} has been removed!")
 
             roll_dice(board_placeholder, free_roll=True)
@@ -162,3 +149,4 @@ if st.session_state.position == 100:
         st.session_state.rolls = 0
         st.session_state.awaiting_chance_answer = False
         st.session_state.chance_roll_pending = False
+        st.session_state.snakes = default_snakes.copy()
