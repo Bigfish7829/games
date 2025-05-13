@@ -139,6 +139,13 @@ if st.session_state.awaiting_chance_answer:
     if st.button("Submit Answer"):
         if answer == "£1000":
             st.success("Correct! You get a free roll.")
+
+            # Remove the snake with the highest start tile
+            if snakes:
+                highest_snake = max(snakes)
+                del snakes[highest_snake]
+                st.info(f"🎉 The snake from tile {highest_snake} has been removed!")
+
             roll_dice(board_placeholder, free_roll=True)
         else:
             st.warning("Incorrect. Better luck next time.")
