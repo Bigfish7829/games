@@ -9,11 +9,17 @@ import copy
 snakes = {16: 6, 47: 26, 49: 11, 56: 53, 62: 19, 64: 60, 87: 24, 93: 73, 95: 75, 98: 78}
 ladders = {2: 38, 4: 14, 9: 31, 21: 42, 28: 84, 36: 44, 51: 67, 71: 91, 80: 100}
 
+chance_tiles = [i for i in range(1, 101) if i % 6 == 0]
+
 # Session state
 if "position" not in st.session_state:
     st.session_state.position = 1
 if "message" not in st.session_state:
     st.session_state.message = ""
+if "rolls" not in st.session_state:
+    st.session_state.rolls = 0
+if "extra_roll" not in st.session_state:
+    st.session_state.extra_roll = False
 
 # Convert tile number to coordinates
 def tile_coords(n):
@@ -70,6 +76,11 @@ def get_base_board():
             rung_y = (1 - t) * y1 + t * y2
             ax.plot([rung_x - dx, rung_x + dx], [rung_y, rung_y], color='green', linewidth=1)
 
+    # Draw chance squares
+    for c in chance_tiles:
+        x, y = tile_coords(c)
+        ax.text(x, y + 0.3, "?", ha='center', va='center', fontsize=14, color='red')
+
     return fig
 
 # Redraw with player marker only
@@ -83,6 +94,9 @@ def draw_board_with_player():
 
 # Game logic
 def roll_dice(board_placeholder):
+    if not st.session_state.extra_roll:
+        st.session_state.rolls += 1
+
     roll = random.randint(1, 6)
     new_pos = min(st.session_state.position + roll, 100)
 
@@ -91,7 +105,6 @@ def roll_dice(board_placeholder):
     board_placeholder.pyplot(draw_board_with_player())
     time.sleep(1)
 
-    # Snakes and ladders logic
     if new_pos in snakes:
         st.session_state.message += f" 🐍 Oh no! You didn’t install eaves vents with your loft insulation, you now have condensation and your rafters are rotting! Slip from {new_pos} to {snakes[new_pos]}"
         st.session_state.position = snakes[new_pos]
@@ -99,8 +112,26 @@ def roll_dice(board_placeholder):
         st.session_state.message += f" 🪜 Congratulations! You installed dMEV and improved indoor air quality. Climb from {new_pos} to {ladders[new_pos]}"
         st.session_state.position = ladders[new_pos]
 
+    if new_pos in chance_tiles:
+        st.session_state.message += " ❓ You landed on a CHANCE tile!"
+        question_result = ask_chance_question()
+        if question_result:
+            st.session_state.message += " ✅ Correct! You get a free roll!"
+            st.session_state.extra_roll = True
+            roll_dice(board_placeholder)
+            return
+        else:
+            st.session_state.message += " ❌ Incorrect. Better luck next time!"
+
+    st.session_state.extra_roll = False
     st.write(f"Current position: {st.session_state.position}")
     board_placeholder.pyplot(draw_board_with_player())
+
+# Question prompt
+def ask_chance_question():
+    st.warning("How much does a typical solar panel array save the resident in a year?")
+    choice = st.radio("Choose an answer:", ["£200", "£1000", "£3000"], key=f"q_{st.session_state.rolls}")
+    return choice == "£1000"
 
 # Streamlit UI
 st.title("🎲 Retrofit Wins and Banana Skins")
@@ -113,8 +144,12 @@ if st.button("Roll Dice"):
 
 st.info(st.session_state.message)
 
+st.markdown(f"**🎯 Total Rolls:** {st.session_state.rolls}")
+
 if st.session_state.position == 100:
-    st.success("🏁 You've reached Net Zero! Click 'Roll Dice' to restart.")
+    st.success(f"🏁 You've reached Net Zero in {st.session_state.rolls} rolls!")
     if st.button("Restart"):
         st.session_state.position = 1
         st.session_state.message = ""
+        st.session_state.rolls = 0
+        st.session_state.extra_roll = False
