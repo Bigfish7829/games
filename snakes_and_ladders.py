@@ -91,16 +91,25 @@ def roll_dice(board_placeholder):
     board_placeholder.pyplot(draw_board_with_player())
     time.sleep(1)
 
-    # Snakes and ladders logic
+    # Snake or ladder check
     if new_pos in snakes:
-        st.session_state.message += f" 🐍 Oh no! You didn’t install eaves vents with your loft insulation, you now have condensation and your rafters are rotting! Slip from {new_pos} to {snakes[new_pos]}"
-        st.session_state.position = snakes[new_pos]
+        final_pos = snakes[new_pos]
+        st.session_state.message += f" 🐍 Oh no! You slipped from {new_pos} to {final_pos}"
+        st.session_state.position = final_pos
+        with st.modal("🐍 Banana Skin!"):
+            st.markdown(f"**You forgot to install eaves vents and your rafters are rotting!**\n\nYou slipped from {new_pos} to {final_pos}.")
+            st.button("Close")
     elif new_pos in ladders:
-        st.session_state.message += f" 🪜 Congratulations! You installed dMEV and improved indoor air quality. Climb from {new_pos} to {ladders[new_pos]}"
-        st.session_state.position = ladders[new_pos]
+        final_pos = ladders[new_pos]
+        st.session_state.message += f" 🪜 Nice! You climbed from {new_pos} to {final_pos}"
+        st.session_state.position = final_pos
+        with st.modal("🪜 Retrofit Win!"):
+            st.markdown(f"**Great job installing dMEV!**\n\nYou climbed from {new_pos} to {final_pos}.")
+            st.button("Close")
 
     st.write(f"Current position: {st.session_state.position}")
     board_placeholder.pyplot(draw_board_with_player())
+
 
 # Streamlit UI
 st.title("🎲 Retrofit Wins and Banana Skins")
