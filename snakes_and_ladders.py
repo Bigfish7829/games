@@ -14,6 +14,11 @@ if "message" not in st.session_state:
     st.session_state.message = ""
 if "event" not in st.session_state:
     st.session_state.event = None
+if "show_popup" not in st.session_state:
+    st.session_state.show_popup = False
+if "popup_text" not in st.session_state:
+    st.session_state.popup_text = ""
+
 
 # --- Tile coordinate helper ---
 def tile_coords(n):
@@ -86,41 +91,40 @@ def roll_dice(board_placeholder):
 
     if new_pos in snakes:
         end = snakes[new_pos]
-        st.session_state.message += f" 🐍 Oh no! You slipped from {new_pos} to {end}"
         st.session_state.position = end
-        st.session_state.event = ("snake", new_pos, end)
+        st.session_state.popup_text = f"🐍 **Banana Skin!** You slipped from {new_pos} to {end}."
+        st.session_state.show_popup = True
     elif new_pos in ladders:
         end = ladders[new_pos]
-        st.session_state.message += f" 🪜 You climbed from {new_pos} to {end}"
         st.session_state.position = end
-        st.session_state.event = ("ladder", new_pos, end)
+        st.session_state.popup_text = f"🪜 **Retrofit Win!** You climbed from {new_pos} to {end}."
+        st.session_state.show_popup = True
+
 
     board_placeholder.pyplot(draw_board_with_player())
 
 # --- UI ---
+
 st.title("🎲 Retrofit Wins and Banana Skins")
 
 board_placeholder = st.empty()
-board_placeholder.pyplot(draw_board_with_player())  # Always draw board on load
+board_placeholder.pyplot(draw_board_with_player())
 
-if st.button("Roll Dice"):
-    roll_dice(board_placeholder)
+# Simulated popup
+if st.session_state.show_popup:
+    st.warning(st.session_state.popup_text)
+    if st.button("Close"):
+        st.session_state.show_popup = False
+else:
+    if st.button("Roll Dice"):
+        roll_dice(board_placeholder)
 
-st.info(st.session_state.message)
+    st.info(st.session_state.message)
 
-# Event messages
-if st.session_state.event:
-    kind, start, end = st.session_state.event
-    if kind == "snake":
-        st.warning(f"🐍 **Banana Skin!** You slipped from {start} to {end}.")
-    elif kind == "ladder":
-        st.success(f"🪜 **Retrofit Win!** You climbed from {start} to {end}.")
-    st.session_state.event = None
-
-# Win condition
-if st.session_state.position == 100:
-    st.success("🏁 You've reached Net Zero! Click 'Roll Dice' to restart.")
-    if st.button("Restart"):
-        st.session_state.position = 1
-        st.session_state.message = ""
-        st.session_state.event = None
+    if st.session_state.position == 100:
+        st.success("🏁 You've reached Net Zero! Click 'Roll Dice' to restart.")
+        if st.button("Restart"):
+            st.session_state.position = 1
+            st.session_state.message = ""
+            st.session_state.show_popup = False
+            st.session_state.popup_text = ""
