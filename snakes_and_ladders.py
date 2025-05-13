@@ -30,8 +30,7 @@ def tile_coords(n):
     x = col if row % 2 == 0 else 9 - col
     return x, y
 
-# Cached base board (checkerboard, snakes, ladders, numbers)
-@st.cache_resource
+# Base board (checkerboard, snakes, ladders, numbers)
 def get_base_board():
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.set_xlim(-0.5, 9.5)
@@ -86,7 +85,7 @@ def get_base_board():
 
 # Redraw with player marker only
 def draw_board_with_player():
-    fig = copy.deepcopy(get_base_board())
+    fig = get_base_board()
     ax = fig.axes[0]
     if st.session_state.position > 0:
         x, y = tile_coords(st.session_state.position)
@@ -144,7 +143,7 @@ if st.session_state.awaiting_chance_answer:
             if snakes:
                 highest_snake = max(snakes)
                 del snakes[highest_snake]
-                st.info(f"🎉 The snake from tile {highest_snake} has been removed!")
+                st.info(f"🎉 The banana skin from tile {highest_snake} has been removed!")
 
             roll_dice(board_placeholder, free_roll=True)
         else:
