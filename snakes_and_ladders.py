@@ -32,7 +32,7 @@ def tile_coords(n):
     x = col if row % 2 == 0 else 9 - col
     return x, y
 
-# Base board (checkerboard, ladders, numbers)
+# Base board (checkerboard, snakes, ladders, numbers)
 def get_base_board():
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.set_xlim(-0.5, 9.5)
@@ -53,6 +53,21 @@ def get_base_board():
     for i in chance_tiles:
         x, y = tile_coords(i)
         ax.text(x, y, "?", ha='center', va='center', fontsize=14, color='red', weight='bold')
+
+    # Draw snakes from session state
+    for start, end in st.session_state.snakes.items():
+        x1, y1 = tile_coords(start)
+        x2, y2 = tile_coords(end)
+        segments = 100
+        x = np.linspace(x1, x2, segments)
+        y = np.linspace(y1, y2, segments)
+        wiggle = np.sin(np.linspace(0, 4 * np.pi, segments)) * 0.15
+        dx, dy = x2 - x1, y2 - y1
+        length = np.hypot(dx, dy)
+        ux, uy = -dy / length, dx / length
+        x_snake = x + wiggle * ux
+        y_snake = y + wiggle * uy
+        ax.plot(x_snake, y_snake, color='yellow', linewidth=3)
 
     # Ladders as rails and rungs
     for start, end in ladders.items():
