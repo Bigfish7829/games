@@ -54,8 +54,9 @@ def get_base_board():
         x, y = tile_coords(i)
         ax.text(x, y, "?", ha='center', va='center', fontsize=14, color='red', weight='bold')
 
-    # Draw snakes from session state
-    for start, end in st.session_state.snakes.items():
+    # ✅ Draw snakes using current session state
+    current_snakes = st.session_state.snakes  # force re-read
+    for start, end in current_snakes.items():
         x1, y1 = tile_coords(start)
         x2, y2 = tile_coords(end)
         segments = 100
@@ -69,7 +70,7 @@ def get_base_board():
         y_snake = y + wiggle * uy
         ax.plot(x_snake, y_snake, color='yellow', linewidth=3)
 
-    # Ladders as rails and rungs
+    # Draw ladders
     for start, end in ladders.items():
         x1, y1 = tile_coords(start)
         x2, y2 = tile_coords(end)
