@@ -132,11 +132,14 @@ if st.session_state.awaiting_chance_answer:
                 del st.session_state.snakes[highest_snake]
                 st.info(f"🎉 The banana skin from tile {highest_snake} has been removed!")
 
-            roll_dice(board_placeholder, free_roll=True)
         else:
             st.warning("Incorrect. Better luck next time.")
+
         st.session_state.awaiting_chance_answer = False
         st.session_state.chance_roll_pending = False
+
+        if answer == "£1000":
+            roll_dice(board_placeholder, free_roll=True)
 
 st.info(st.session_state.message)
 st.write(f"🎯 Total Rolls: {st.session_state.rolls}")
