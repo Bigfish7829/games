@@ -15,7 +15,7 @@ if "message" not in st.session_state:
 if "event" not in st.session_state:
     st.session_state.event = None
 
-# --- Tile coordinate function ---
+# --- Tile coordinate helper ---
 def tile_coords(n):
     row = (n - 1) // 10
     col = (n - 1) % 10
@@ -23,9 +23,9 @@ def tile_coords(n):
     x = col if row % 2 == 0 else 9 - col
     return x, y
 
-# --- Cached static board ---
+# --- Draw the board with snakes, ladders, and player ---
 @st.cache_resource
-def get_static_board():
+def generate_base_board():
     fig, ax = plt.subplots(figsize=(6, 6))
     ax.set_xlim(-0.5, 9.5)
     ax.set_ylim(-0.5, 9.5)
@@ -64,17 +64,63 @@ def get_static_board():
             rung_y = (1 - t) * y1 + t * y2
             ax.plot([rung_x - dx, rung_x + dx], [rung_y, rung_y], color='green', linewidth=1)
 
-    return fig, ax
+    return fig
 
-# --- Draw only the player ---
+# --- Overlay player on cached board ---
 def draw_board_with_player():
-    fig, ax = get_static_board()
-    if st.session_state.position > 0:
-        x, y = tile_coords(st.session_state.position)
-        ax.plot(x, y, 'o', color='blue', markersize=15)
+    fig = generate_base_board()
+    ax = fig.axes[0]
+    x, y = tile_coords(st.session_state.position)
+    ax.plot(x, y, 'o', color='blue', markersize=15)
     return fig
 
 # --- Game logic ---
 def roll_dice(board_placeholder):
     roll = random.randint(1, 6)
     new_pos = min(st.session_state.position + roll, 100)
+
+    st.session_state.message = f"🎲 You rolled a {roll}"
+    st.session_state.event = None
+    st.session_state.position = new_pos
+    board_placeholder.pyplot(draw_board_with_player())
+
+    if new_pos in snakes:
+        end = snakes[new_pos]
+        st.session_state.message += f" 🐍 Oh no! You slipped from {new_pos} to {end}"
+        st.session_state.position = end
+        st.session_state.event = ("snake", new_pos, end)
+    elif new_pos in ladders:
+        end = ladders[new_pos]
+        st.session_state.message += f" 🪜 You climbed from {new_pos} to {end}"
+        st.session_state.position = end
+        st.session_state.event = ("ladder", new_pos, end)
+
+    board_placeholder.pyplot(draw_board_with_player())
+
+# --- UI ---
+st.title("🎲 Retrofit Wins and Banana Skins")
+
+board_placeholder = st.empty()
+board_placeholder.pyplot(draw_board_with_player())  # Always draw board on load
+
+if st.button("Roll Dice"):
+    roll_dice(board_placeholder)
+
+st.info(st.session_state.message)
+
+# Event messages
+if st.session_state.event:
+    kind, start, end = st.session_state.event
+    if kind == "snake":
+        st.warning(f"🐍 **Banana Skin!** You slipped from {start} to {end}.")
+    elif kind == "ladder":
+        st.success(f"🪜 **Retrofit Win!** You climbed from {start} to {end}.")
+    st.session_state.event = None
+
+# Win condition
+if st.session_state.position == 100:
+    st.success("🏁 You've reached Net Zero! Click 'Roll Dice' to restart.")
+    if st.button("Restart"):
+        st.session_state.position = 1
+        st.session_state.message = ""
+        st.session_state.event = None
