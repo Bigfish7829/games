@@ -96,7 +96,7 @@ def draw_board_with_player():
     return fig
 
 # Game logic
-def roll_dice(board_placeholder, free_roll=False):
+def roll_dice(board_placeholder, free_roll):
     roll = random.randint(1, 6)
     new_pos = min(st.session_state.position + roll, 100)
 
@@ -131,6 +131,8 @@ st.title("🎲 Retrofit Wins and Banana Skins")
 board_placeholder = st.empty()
 board_placeholder.pyplot(draw_board_with_player())
 
+free_roll_index = False
+
 # Display chance question if landed
 if st.session_state.awaiting_chance_answer:
     st.subheader("❓ Chance Question")
@@ -145,7 +147,7 @@ if st.session_state.awaiting_chance_answer:
                 highest_snake = max(st.session_state.snakes)
                 del st.session_state.snakes[highest_snake]
                 st.info(f"🎉 The banana skin from tile {highest_snake} has been removed!")
-                free_roll = True
+                free_roll_index = True
 
         else:
             st.warning("Incorrect. Better luck next time.")
@@ -154,7 +156,7 @@ if st.session_state.awaiting_chance_answer:
         st.session_state.chance_roll_pending = False
 
 if st.button("Roll Dice") and not st.session_state.awaiting_chance_answer:
-    roll_dice(board_placeholder, free_roll=free_roll)    
+    roll_dice(board_placeholder, free_roll_index)    
 
 st.info(st.session_state.message)
 st.write(f"🎯 Total Rolls: {st.session_state.rolls}")
