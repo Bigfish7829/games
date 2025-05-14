@@ -98,15 +98,20 @@ def roll_dice(board_placeholder, free_roll):
     board_placeholder.pyplot(draw_board_with_player())
     time.sleep(1)
 
-    # Snakes/ladders
     if new_pos in st.session_state.snakes:
-        end = st.session_state.snakes[new_pos]
-        st.session_state.message += f" 🐍 You didn’t install eaves vents — drop to {end}!"
-        st.session_state.position = end
+        st.session_state.message += (
+            f" 🐍 Oh no! You didn’t install eaves vents with your loft insulation, "
+            f"you now have condensation and your rafters are rotting! "
+            f"Slip from {new_pos} to {st.session_state.snakes[new_pos]}"
+        )
+        st.session_state.position = st.session_state.snakes[new_pos]
     elif new_pos in ladders:
-        end = ladders[new_pos]
-        st.session_state.message += f" 🪜 Great install — climb to {end}!"
-        st.session_state.position = end
+        st.session_state.message += (
+            f" 🪜 Congratulations! You installed dMEV and improved indoor air quality. "
+            f"Climb from {new_pos} to {ladders[new_pos]}"
+        )
+        st.session_state.position = ladders[new_pos]
+
 
     board_placeholder.pyplot(draw_board_with_player())
 
@@ -127,25 +132,29 @@ if not st.session_state.awaiting_chance_answer:
         st.session_state.free_roll_next = False
 
 # Chance question
-if st.session_state.awaiting_chance_answer and not st.session_state.chance_answer_submitted:
-    st.subheader("❓ Chance Question")
-    st.write("How much does a typical solar panel array save the resident in a year?")
-    answer = st.radio("Choose one:", ["£200", "£1000", "£3000"], index=None)
-    if st.button("Submit Answer") and answer:
-        st.session_state.chance_answer_submitted = True
-        if answer == "£1000":
-            st.success("Correct! You get a free roll.")
+if st.session_state.awaiting_chance_answer:
+    with st.form(key="chance_form", clear_on_submit=True):
+        st.subheader("❓ Chance Question")
+        st.write("How much does a typical solar panel array save the resident in a year?")
+        answer = st.radio("Choose one:", ["£200", "£1000", "£3000"], index=None)
+        submitted = st.form_submit_button("Submit Answer")
 
-            # Remove highest snake
-            if st.session_state.snakes:
-                highest_snake = max(st.session_state.snakes)
-                del st.session_state.snakes[highest_snake]
-                st.info(f"🎉 You removed a banana skin from tile {highest_snake}!")
+        if submitted and answer:
+            if answer == "£1000":
+                st.session_state.chance_answer_result = "correct"
+                st.success("Correct! You get a free roll.")
+                st.session_state.free_roll_next = True
 
-            st.session_state.free_roll_next = True
-        else:
-            st.warning("Incorrect. Better luck next time.")
-        st.session_state.awaiting_chance_answer = False
+                if st.session_state.snakes:
+                    highest_snake = max(st.session_state.snakes)
+                    del st.session_state.snakes[highest_snake]
+                    st.info(f"🎉 You are on the way to a no regrets retrofit! The banana skin from tile {highest_snake} has been removed!")
+            else:
+                st.session_state.chance_answer_result = "incorrect"
+                st.warning("Incorrect. Better luck next time.")
+
+            st.session_state.awaiting_chance_answer = False
+
 
 st.info(st.session_state.message)
 st.write(f"🎯 Total Rolls: {st.session_state.rolls}")
