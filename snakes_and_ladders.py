@@ -123,19 +123,22 @@ st.title("🎲 Retrofit Wins and Banana Skins")
 
 # Overlay Event Message
 if st.session_state.event_message:
-    st.markdown(
-        f"""
-        <div style='position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 1000;'>
-            <div style='background: white; padding: 40px; border-radius: 10px; max-width: 600px; text-align: center; box-shadow: 0 0 10px rgba(0,0,0,0.5);'>
-                <h3>Event</h3>
-                <p style='font-size: 18px'>{st.session_state.event_message}</p>
+    with st.form("event_form"):
+        st.markdown(
+            f"""
+            <div style='position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 1000;'>
+                <div style='background: white; padding: 40px; border-radius: 10px; max-width: 600px; text-align: center; box-shadow: 0 0 10px rgba(0,0,0,0.5);'>
+                    <h3>Event</h3>
+                    <p style='font-size: 18px'>{st.session_state.event_message}</p>
+                    <button type='submit'>Continue</button>
+                </div>
             </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-    if st.button("Continue"):
-        st.session_state.event_message = ""
+            """,
+            unsafe_allow_html=True
+        )
+        if st.form_submit_button("Continue"):
+            st.session_state.event_message = ""
+
 
 board_placeholder = st.empty()
 board_placeholder.pyplot(draw_board_with_player())
