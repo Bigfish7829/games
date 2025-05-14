@@ -3,7 +3,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import random
 import time
-import copy
 
 # Define default snakes, ladders, and chance tiles
 default_snakes = {16: 6, 47: 26, 49: 11, 56: 53, 62: 19, 64: 60, 87: 24, 93: 73, 95: 75, 98: 78}
@@ -11,18 +10,18 @@ ladders = {2: 38, 4: 14, 9: 31, 21: 42, 28: 84, 36: 44, 51: 67, 71: 91, 80: 100}
 chance_tiles = [i for i in range(6, 101, 6)]
 
 # Session state
-if "position" not in st.session_state:
-    st.session_state.position = 1
-if "message" not in st.session_state:
-    st.session_state.message = ""
-if "rolls" not in st.session_state:
-    st.session_state.rolls = 0
-if "awaiting_chance_answer" not in st.session_state:
-    st.session_state.awaiting_chance_answer = False
-if "chance_roll_pending" not in st.session_state:
-    st.session_state.chance_roll_pending = False
-if "snakes" not in st.session_state:
-    st.session_state.snakes = default_snakes.copy()
+for key, default in {
+    "position": 1,
+    "message": "",
+    "rolls": 0,
+    "awaiting_chance_answer": False,
+    "chance_roll_pending": False,
+    "snakes": default_snakes.copy(),
+    "free_roll_next": False,
+    "chance_answer_submitted": False,
+}.items():
+    if key not in st.session_state:
+        st.session_state[key] = default
 
 # Convert tile number to coordinates
 def tile_coords(n):
@@ -41,52 +40,43 @@ def get_base_board():
     ax.set_yticks([])
     ax.set_aspect('equal')
 
-    # Draw squares
     for i in range(1, 101):
         x, y = tile_coords(i)
         color = '#f0d9b5' if (x + y) % 2 == 0 else '#b58863'
         rect = plt.Rectangle((x - 0.5, y - 0.5), 1, 1, facecolor=color, edgecolor='black')
         ax.add_patch(rect)
-        ax.text(x, y, str(i), ha='center', va='center', fontsize=8, color='black')
+        ax.text(x, y, str(i), ha='center', va='center', fontsize=8)
 
-    # Draw chance squares
     for i in chance_tiles:
         x, y = tile_coords(i)
         ax.text(x, y, "?", ha='center', va='center', fontsize=14, color='red', weight='bold')
 
-    # ✅ Draw snakes using current session state
-    current_snakes = st.session_state.snakes  # force re-read
-    for start, end in current_snakes.items():
+    for start, end in st.session_state.snakes.items():
         x1, y1 = tile_coords(start)
         x2, y2 = tile_coords(end)
-        segments = 100
-        x = np.linspace(x1, x2, segments)
-        y = np.linspace(y1, y2, segments)
-        wiggle = np.sin(np.linspace(0, 4 * np.pi, segments)) * 0.15
+        x = np.linspace(x1, x2, 100)
+        y = np.linspace(y1, y2, 100)
+        wiggle = np.sin(np.linspace(0, 4 * np.pi, 100)) * 0.15
         dx, dy = x2 - x1, y2 - y1
         length = np.hypot(dx, dy)
         ux, uy = -dy / length, dx / length
-        x_snake = x + wiggle * ux
-        y_snake = y + wiggle * uy
-        ax.plot(x_snake, y_snake, color='yellow', linewidth=3)
+        ax.plot(x + wiggle * ux, y + wiggle * uy, color='yellow', linewidth=3)
 
-    # Draw ladders
     for start, end in ladders.items():
         x1, y1 = tile_coords(start)
         x2, y2 = tile_coords(end)
         dx = 0.15
         ax.plot([x1 - dx, x2 - dx], [y1, y2], color='green', linewidth=2)
         ax.plot([x1 + dx, x2 + dx], [y1, y2], color='green', linewidth=2)
-        num_rungs = int(((y2 - y1)**2 + (x2 - x1)**2)**0.5 / 0.2)
-        for i in range(1, num_rungs):
-            t = i / num_rungs
-            rung_x = (1 - t) * x1 + t * x2
-            rung_y = (1 - t) * y1 + t * y2
-            ax.plot([rung_x - dx, rung_x + dx], [rung_y, rung_y], color='green', linewidth=1)
+        rungs = int(np.hypot(x2 - x1, y2 - y1) / 0.2)
+        for i in range(1, rungs):
+            t = i / rungs
+            xr = (1 - t) * x1 + t * x2
+            yr = (1 - t) * y1 + t * y2
+            ax.plot([xr - dx, xr + dx], [yr, yr], color='green', linewidth=1)
 
     return fig
 
-# Redraw with player marker only
 def draw_board_with_player():
     fig = get_base_board()
     ax = fig.axes[0]
@@ -94,78 +84,76 @@ def draw_board_with_player():
         x, y = tile_coords(st.session_state.position)
         ax.plot(x, y, 'o', color='blue', markersize=15)
     return fig
-free_roll_index = False
 
-# Game logic
+# Dice logic
 def roll_dice(board_placeholder, free_roll):
     roll = random.randint(1, 6)
     new_pos = min(st.session_state.position + roll, 100)
+    st.session_state.message = f"🎲 You rolled a {roll}"
 
     if not free_roll:
         st.session_state.rolls += 1
-    free_roll = False
-    free_roll_index = False
 
-    st.session_state.message = f"🎲 You rolled a {roll}"
     st.session_state.position = new_pos
     board_placeholder.pyplot(draw_board_with_player())
     time.sleep(1)
 
-    # Snakes and ladders logic
+    # Snakes/ladders
     if new_pos in st.session_state.snakes:
-        st.session_state.message += f" 🐍 Oh no! You didn’t install eaves vents with your loft insulation, you now have condensation and your rafters are rotting! Slip from {new_pos} to {st.session_state.snakes[new_pos]}"
-        st.session_state.position = st.session_state.snakes[new_pos]
+        end = st.session_state.snakes[new_pos]
+        st.session_state.message += f" 🐍 You didn’t install eaves vents — drop to {end}!"
+        st.session_state.position = end
     elif new_pos in ladders:
-        st.session_state.message += f" 🪜 Congratulations! You installed dMEV and improved indoor air quality. Climb from {new_pos} to {ladders[new_pos]}"
-        st.session_state.position = ladders[new_pos]
+        end = ladders[new_pos]
+        st.session_state.message += f" 🪜 Great install — climb to {end}!"
+        st.session_state.position = end
 
-    st.write(f"Current position: {st.session_state.position}")
     board_placeholder.pyplot(draw_board_with_player())
 
-    # Chance square logic
+    # Chance
     if st.session_state.position in chance_tiles:
         st.session_state.awaiting_chance_answer = True
-        st.session_state.chance_roll_pending = True
-        st.button("Roll Dice", disabled=st.session_state.awaiting_chance_answer)
-        st.subheader("❓ Chance Question")
-        st.write("How much does a typical solar panel array save the resident in a year?")
-        answer = st.radio("Choose one:", ["£200", "£1000", "£3000"], index=None)
-        if st.button("Submit Answer"):
-            if answer == "£1000":
-                st.success("Correct! You get a free roll.")
-    
-                # Remove the snake with the highest start tile
-                if st.session_state.snakes:
-                    highest_snake = max(st.session_state.snakes)
-                    del st.session_state.snakes[highest_snake]
-                    st.info(f"🎉 You are on the way to a no regrets retrofit! The banana skin from tile {highest_snake} has been removed!")
-                    free_roll_index = True
-            else:
-                st.warning("Incorrect. Better luck next time.")
+        st.session_state.chance_answer_submitted = False
 
-        st.session_state.awaiting_chance_answer = False
-        st.session_state.chance_roll_pending = False
-
-# Streamlit UI
+# UI
 st.title("🎲 Retrofit Wins and Banana Skins")
-
 board_placeholder = st.empty()
 board_placeholder.pyplot(draw_board_with_player())
 
+# Dice button
+if not st.session_state.awaiting_chance_answer:
+    if st.button("Roll Dice"):
+        roll_dice(board_placeholder, st.session_state.free_roll_next)
+        st.session_state.free_roll_next = False
 
+# Chance question
+if st.session_state.awaiting_chance_answer and not st.session_state.chance_answer_submitted:
+    st.subheader("❓ Chance Question")
+    st.write("How much does a typical solar panel array save the resident in a year?")
+    answer = st.radio("Choose one:", ["£200", "£1000", "£3000"], index=None)
+    if st.button("Submit Answer") and answer:
+        st.session_state.chance_answer_submitted = True
+        if answer == "£1000":
+            st.success("Correct! You get a free roll.")
 
-if st.button("Roll Dice") and not st.session_state.awaiting_chance_answer:
-    roll_dice(board_placeholder, free_roll_index)    
+            # Remove highest snake
+            if st.session_state.snakes:
+                highest_snake = max(st.session_state.snakes)
+                del st.session_state.snakes[highest_snake]
+                st.info(f"🎉 You removed a banana skin from tile {highest_snake}!")
+
+            st.session_state.free_roll_next = True
+        else:
+            st.warning("Incorrect. Better luck next time.")
+        st.session_state.awaiting_chance_answer = False
 
 st.info(st.session_state.message)
 st.write(f"🎯 Total Rolls: {st.session_state.rolls}")
 
+# End game
 if st.session_state.position == 100:
     st.success(f"🏁 You've reached Net Zero in {st.session_state.rolls} rolls!")
     if st.button("Restart"):
-        st.session_state.position = 1
-        st.session_state.message = ""
-        st.session_state.rolls = 0
-        st.session_state.awaiting_chance_answer = False
-        st.session_state.chance_roll_pending = False
-        st.session_state.snakes = default_snakes.copy()
+        for key in ["position", "message", "rolls", "awaiting_chance_answer", "chance_roll_pending", "snakes", "free_roll_next", "chance_answer_submitted"]:
+            del st.session_state[key]
+        st.experimental_rerun()
