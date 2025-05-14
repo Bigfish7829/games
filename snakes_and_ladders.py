@@ -94,6 +94,7 @@ def draw_board_with_player():
         x, y = tile_coords(st.session_state.position)
         ax.plot(x, y, 'o', color='blue', markersize=15)
     return fig
+free_roll_index = False
 
 # Game logic
 def roll_dice(board_placeholder, free_roll):
@@ -103,6 +104,7 @@ def roll_dice(board_placeholder, free_roll):
     if not free_roll:
         st.session_state.rolls += 1
     free_roll = False
+    free_roll_index = False
 
     st.session_state.message = f"🎲 You rolled a {roll}"
     st.session_state.position = new_pos
@@ -124,21 +126,11 @@ def roll_dice(board_placeholder, free_roll):
     if st.session_state.position in chance_tiles:
         st.session_state.awaiting_chance_answer = True
         st.session_state.chance_roll_pending = True
-
-# Streamlit UI
-st.title("🎲 Retrofit Wins and Banana Skins")
-
-board_placeholder = st.empty()
-board_placeholder.pyplot(draw_board_with_player())
-
-free_roll_index = False
-
-# Display chance question if landed
-if st.session_state.awaiting_chance_answer:
-    st.subheader("❓ Chance Question")
-    st.write("How much does a typical solar panel array save the resident in a year?")
-    answer = st.radio("Choose one:", ["£200", "£1000", "£3000"], index=None)
-    if st.button("Submit Answer"):
+        st.button("Roll Dice", disabled=st.session_state.awaiting_chance_answer)
+        st.subheader("❓ Chance Question")
+        st.write("How much does a typical solar panel array save the resident in a year?")
+        answer = st.radio("Choose one:", ["£200", "£1000", "£3000"], index=None)
+        if st.button("Submit Answer"):
         if answer == "£1000":
             st.success("Correct! You get a free roll.")
 
@@ -146,14 +138,21 @@ if st.session_state.awaiting_chance_answer:
             if st.session_state.snakes:
                 highest_snake = max(st.session_state.snakes)
                 del st.session_state.snakes[highest_snake]
-                st.info(f"🎉 The banana skin from tile {highest_snake} has been removed!")
+                st.info(f"🎉 You are on the way to a no regrets retrofit! The banana skin from tile {highest_snake} has been removed!")
                 free_roll_index = True
-
         else:
             st.warning("Incorrect. Better luck next time.")
 
         st.session_state.awaiting_chance_answer = False
         st.session_state.chance_roll_pending = False
+
+# Streamlit UI
+st.title("🎲 Retrofit Wins and Banana Skins")
+
+board_placeholder = st.empty()
+board_placeholder.pyplot(draw_board_with_player())
+
+
 
 if st.button("Roll Dice") and not st.session_state.awaiting_chance_answer:
     roll_dice(board_placeholder, free_roll_index)    
