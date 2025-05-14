@@ -154,7 +154,7 @@ if st.session_state.awaiting_chance_answer:
         st.session_state.chance_roll_pending = False
 
 if st.button("Roll Dice") and not st.session_state.awaiting_chance_answer:
-    roll_dice(board_placeholder, free_roll)    
+    roll_dice(board_placeholder, free_roll=free_roll)    
 
 st.info(st.session_state.message)
 st.write(f"🎯 Total Rolls: {st.session_state.rolls}")
