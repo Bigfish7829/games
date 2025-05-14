@@ -102,6 +102,7 @@ def roll_dice(board_placeholder, free_roll=False):
 
     if not free_roll:
         st.session_state.rolls += 1
+    free_roll = False
 
     st.session_state.message = f"🎲 You rolled a {roll}"
     st.session_state.position = new_pos
@@ -130,9 +131,6 @@ st.title("🎲 Retrofit Wins and Banana Skins")
 board_placeholder = st.empty()
 board_placeholder.pyplot(draw_board_with_player())
 
-if st.button("Roll Dice") and not st.session_state.awaiting_chance_answer:
-    roll_dice(board_placeholder)
-
 # Display chance question if landed
 if st.session_state.awaiting_chance_answer:
     st.subheader("❓ Chance Question")
@@ -147,6 +145,7 @@ if st.session_state.awaiting_chance_answer:
                 highest_snake = max(st.session_state.snakes)
                 del st.session_state.snakes[highest_snake]
                 st.info(f"🎉 The banana skin from tile {highest_snake} has been removed!")
+                free_roll = True
 
         else:
             st.warning("Incorrect. Better luck next time.")
@@ -154,8 +153,8 @@ if st.session_state.awaiting_chance_answer:
         st.session_state.awaiting_chance_answer = False
         st.session_state.chance_roll_pending = False
 
-        if answer == "£1000":
-            roll_dice(board_placeholder, free_roll=True)
+if st.button("Roll Dice") and not st.session_state.awaiting_chance_answer:
+    roll_dice(board_placeholder, free_roll)    
 
 st.info(st.session_state.message)
 st.write(f"🎯 Total Rolls: {st.session_state.rolls}")
