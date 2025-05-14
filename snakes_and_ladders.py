@@ -24,8 +24,6 @@ if "snakes" not in st.session_state:
     st.session_state.snakes = default_snakes.copy()
 if "event_message" not in st.session_state:
     st.session_state.event_message = ""
-if "dismiss_overlay" not in st.session_state:
-    st.session_state.dismiss_overlay = False
 
 # Convert tile number to coordinates
 def tile_coords(n):
@@ -131,18 +129,13 @@ if st.session_state.event_message:
             <div style='background: white; padding: 40px; border-radius: 10px; max-width: 600px; text-align: center; box-shadow: 0 0 10px rgba(0,0,0,0.5);'>
                 <h3>Event</h3>
                 <p style='font-size: 18px'>{st.session_state.event_message}</p>
-                <form action="" method="post">
-                    <button type="submit" name="dismiss_overlay" style='margin-top: 20px; font-size: 16px; padding: 10px 20px;'>Continue</button>
-                </form>
             </div>
         </div>
         """,
         unsafe_allow_html=True
     )
-
-if st.session_state.get("dismiss_overlay"):
-    st.session_state.event_message = ""
-    st.session_state.dismiss_overlay = False
+    if st.button("Continue"):
+        st.session_state.event_message = ""
 
 board_placeholder = st.empty()
 board_placeholder.pyplot(draw_board_with_player())
@@ -163,4 +156,3 @@ if st.session_state.position == 100:
         st.session_state.chance_roll_pending = False
         st.session_state.snakes = default_snakes.copy()
         st.session_state.event_message = ""
-        st.session_state.dismiss_overlay = False
