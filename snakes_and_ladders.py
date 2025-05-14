@@ -131,17 +131,17 @@ def roll_dice(board_placeholder, free_roll):
         st.write("How much does a typical solar panel array save the resident in a year?")
         answer = st.radio("Choose one:", ["£200", "£1000", "£3000"], index=None)
         if st.button("Submit Answer"):
-        if answer == "£1000":
-            st.success("Correct! You get a free roll.")
-
-            # Remove the snake with the highest start tile
-            if st.session_state.snakes:
-                highest_snake = max(st.session_state.snakes)
-                del st.session_state.snakes[highest_snake]
-                st.info(f"🎉 You are on the way to a no regrets retrofit! The banana skin from tile {highest_snake} has been removed!")
-                free_roll_index = True
-        else:
-            st.warning("Incorrect. Better luck next time.")
+            if answer == "£1000":
+                st.success("Correct! You get a free roll.")
+    
+                # Remove the snake with the highest start tile
+                if st.session_state.snakes:
+                    highest_snake = max(st.session_state.snakes)
+                    del st.session_state.snakes[highest_snake]
+                    st.info(f"🎉 You are on the way to a no regrets retrofit! The banana skin from tile {highest_snake} has been removed!")
+                    free_roll_index = True
+            else:
+                st.warning("Incorrect. Better luck next time.")
 
         st.session_state.awaiting_chance_answer = False
         st.session_state.chance_roll_pending = False
