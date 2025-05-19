@@ -134,7 +134,7 @@ if not st.session_state.awaiting_chance_answer:
 if st.session_state.awaiting_chance_answer:
     with st.form(key="chance_form", clear_on_submit=True):
         st.subheader("❓ Chance Question")
-        st.write("Which retrofit measure typically redcues the carbon emissions the most?")
+        st.write("Which retrofit measure typically has the biggest impact on reducing carbon emmissions?")
         answer = st.radio("Choose one:", ["Loft insulation", "Solar panels", "Air source heat pumps"], index=None)
         submitted = st.form_submit_button("Submit Answer")
 
