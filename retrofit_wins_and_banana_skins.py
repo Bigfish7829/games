@@ -130,7 +130,6 @@ if not st.session_state.awaiting_chance_answer:
         roll_dice(board_placeholder, st.session_state.free_roll_next)
         st.session_state.free_roll_next = False
 
-
 # Chance question
 if st.session_state.awaiting_chance_answer:
     with st.form(key="chance_form", clear_on_submit=True):
@@ -152,7 +151,9 @@ if st.session_state.awaiting_chance_answer:
             else:
                 st.session_state.chance_answer_result = "incorrect"
                 st.warning("Incorrect. Better luck next time.")
-    st.session_state.awaiting_chance_answer = False
+
+            st.session_state.awaiting_chance_answer = False
+
 
 st.info(st.session_state.message)
 st.write(f"🎯 Total Rolls: {st.session_state.rolls}")
