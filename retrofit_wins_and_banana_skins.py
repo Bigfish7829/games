@@ -155,7 +155,6 @@ if st.session_state.awaiting_chance_answer:
 
             st.session_state.awaiting_chance_answer = False
             if st.button("OK"):
-                st.session_state.chance_answer_done = False
                 st.rerun()
 
 
