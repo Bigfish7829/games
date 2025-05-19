@@ -148,6 +148,7 @@ if st.session_state.awaiting_chance_answer:
                 st.warning("Incorrect. Better luck next time.")
 
             st.session_state.awaiting_chance_answer = False
+            st.rerun()
 
 # Dice button
 if not st.session_state.awaiting_chance_answer:
