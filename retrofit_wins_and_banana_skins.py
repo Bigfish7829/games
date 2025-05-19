@@ -124,11 +124,6 @@ st.title("🎲 Retrofit Wins and Banana Skins")
 board_placeholder = st.empty()
 board_placeholder.pyplot(draw_board_with_player())
 
-# Dice button
-if not st.session_state.awaiting_chance_answer:
-    if st.button("Roll Dice"):
-        roll_dice(board_placeholder, st.session_state.free_roll_next)
-        st.session_state.free_roll_next = False
 
 # Chance question
 if st.session_state.awaiting_chance_answer:
@@ -153,6 +148,12 @@ if st.session_state.awaiting_chance_answer:
                 st.warning("Incorrect. Better luck next time.")
 
             st.session_state.awaiting_chance_answer = False
+
+# Dice button
+if not st.session_state.awaiting_chance_answer:
+    if st.button("Roll Dice"):
+        roll_dice(board_placeholder, st.session_state.free_roll_next)
+        st.session_state.free_roll_next = False
 
 
 st.info(st.session_state.message)
