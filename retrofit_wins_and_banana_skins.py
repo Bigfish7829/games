@@ -153,13 +153,6 @@ if st.session_state.awaiting_chance_answer:
                 st.session_state.chance_answer_result = "incorrect"
                 st.warning("Incorrect. Better luck next time.")
 
-            st.session_state.awaiting_chance_answer = False
-            if st.button("OK"):
-                st.rerun()
-
-
-
-
 st.info(st.session_state.message)
 st.write(f"🎯 Total Rolls: {st.session_state.rolls}")
 
