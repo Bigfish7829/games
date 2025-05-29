@@ -3,7 +3,7 @@ name: Daily Surf Notifier
 on:
   schedule:
     # Runs at 16:50 BST (UK daylight savings time), which is 15:50 UTC
-    - cron: "18 16 * * *"
+    - cron: "38 16 * * *"
   workflow_dispatch: # manual trigger option
 
 jobs:
@@ -28,4 +28,4 @@ jobs:
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python ./surf-notifier.py
+        run: python surf-notifier
