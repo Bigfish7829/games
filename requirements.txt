@@ -4,4 +4,4 @@ pillow
 numpy
 selenium
 requests
-telegram
+python-telegram-bot>=20.0
