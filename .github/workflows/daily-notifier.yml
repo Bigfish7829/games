@@ -3,7 +3,7 @@ name: Daily Surf Notifier
 on:
   schedule:
     # Runs at 16:38 BST (UK daylight savings time), which is 15:38 UTC
-    - cron: "41 08 * * *"
+    - cron: "46 08 * * *"
   workflow_dispatch:
 
 jobs:
