@@ -1,16 +1,13 @@
 import os
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import sys
-import asyncio
-
-from telegram import Update
-from telegram.ext import Application
+from collections import defaultdict
+from telegram import Bot
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 
 class SurfNotifier:
     def __init__(self):
@@ -19,7 +16,7 @@ class SurfNotifier:
         self.lng = -3.7031
         self.params = [
             'waveHeight', 'wavePeriod', 'waveDirection',
-            'windSpeed', 'windDirection', 'airTemperature'
+            'windSpeed', 'windDirection'
         ]
         self.bot_token = os.getenv('TELEGRAM_TOKEN')
         self.chat_id = os.getenv('TELEGRAM_CHAT_ID')
@@ -27,28 +24,49 @@ class SurfNotifier:
             logger.error("Missing required environment variables: STORMGLASS_API_KEY, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID")
             sys.exit(1)
 
-    def fetch_data(self):
+    def fetch_weather(self, start, end):
         url = "https://api.stormglass.io/v2/weather/point"
+        headers = {'Authorization': self.api_key}
         params = {
             'lat': self.lat,
             'lng': self.lng,
             'params': ','.join(self.params),
-            'start': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S'),
-            'end': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S'),
+            'start': start.isoformat() + 'Z',
+            'end': end.isoformat() + 'Z'
         }
-        headers = {'Authorization': self.api_key}
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
+        return response.json()['hours']
 
-        try:
-            response = requests.get(url, params=params, headers=headers, timeout=10)
-            response.raise_for_status()
-            return response.json()
-        except Exception as e:
-            logger.error(f"Error fetching data from Stormglass: {e}")
-            return None
+    def fetch_tides(self, start, end):
+        url = "https://api.stormglass.io/v2/tide/extremes/point"
+        headers = {'Authorization': self.api_key}
+        params = {
+            'lat': self.lat,
+            'lng': self.lng,
+            'start': start.isoformat() + 'Z',
+            'end': end.isoformat() + 'Z'
+        }
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
+        return response.json()['data']
+
+    def fetch_sun(self, start, end):
+        url = "https://api.stormglass.io/v2/astronomy/point"
+        headers = {'Authorization': self.api_key}
+        params = {
+            'lat': self.lat,
+            'lng': self.lng,
+            'start': start.isoformat() + 'Z',
+            'end': end.isoformat() + 'Z'
+        }
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
+        return response.json()['data']
 
     def get_param_value(self, hour_data, param):
         if param in hour_data and isinstance(hour_data[param], dict):
-            for source, value in hour_data[param].items():
+            for value in hour_data[param].values():
                 if value is not None:
                     return value
         return None
@@ -79,15 +97,9 @@ class SurfNotifier:
             wind_relative = abs(wind_direction - wave_direction)
             if wind_relative > 180:
                 wind_relative = 360 - wind_relative
-
-            if wind_relative > 135:  # Offshore winds best
-                if wind_speed <= 5:
-                    score += 25
-                elif wind_speed <= 10:
-                    score += 20
-                else:
-                    score += 10
-            elif wind_relative < 45:  # Onshore
+            if wind_relative > 135:
+                score += 25 if wind_speed <= 5 else 20 if wind_speed <= 10 else 10
+            elif wind_relative < 45:
                 score += 5
             else:
                 score += 15
@@ -97,50 +109,103 @@ class SurfNotifier:
 
         return max(0, min(100, score))
 
-    async def notify(self, message):
-        app = Application.builder().token(self.bot_token).build()
+    def format_day_report(self, day, scores, tides, sun):
+        summary = f"\n📅 {day.strftime('%A, %B %d')}\n"
+        summary += f"Surf Score: {scores['score']:.0f}/100\n"
+        summary += f"Wave Height: {scores['wave_height']:.2f} m\n"
+        summary += f"Wave Period: {scores['wave_period']:.1f} s\n"
+        summary += f"Wind Speed: {scores['wind_speed']:.1f} m/s\n"
+        summary += f"Wind Direction: {scores['wind_direction']:.0f}°\n"
+        summary += f"Wave Direction: {scores['wave_direction']:.0f}°\n"
+        summary += f"Tide Times: {', '.join(tides)}\n"
+        summary += f"Sunrise: {sun['sunrise']} | Sunset: {sun['sunset']}\n"
+        return summary
+
+    def notify(self, message):
+        bot = Bot(token=self.bot_token)
         try:
-            await app.bot.send_message(chat_id=self.chat_id, text=message)
+            bot.send_message(chat_id=self.chat_id, text=message)
             logger.info("Notification sent successfully")
         except Exception as e:
             logger.error(f"Failed to send notification: {e}")
-        finally:
-            await app.shutdown()
 
-    async def run(self):
-        data = self.fetch_data()
-        if not data or 'hours' not in data or len(data['hours']) == 0:
-            logger.error("No forecast data received")
+    def run(self):
+        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        end = today + timedelta(days=5)
+
+        try:
+            weather_data = self.fetch_weather(today, end)
+            tide_data = self.fetch_tides(today, end)
+            sun_data = self.fetch_sun(today, end)
+        except Exception as e:
+            logger.error(f"API request failed: {e}")
             return
 
-        hour_data = data['hours'][0]
+        # Organize tide data per day
+        tides_by_day = defaultdict(list)
+        for tide in tide_data:
+            dt = datetime.fromisoformat(tide['time'].replace('Z', ''))
+            label = "High" if tide['type'] == 'high' else "Low"
+            tides_by_day[dt.date()].append(f"{label} {dt.strftime('%H:%M')}")
 
-        wave_height = self.get_param_value(hour_data, 'waveHeight')
-        wave_period = self.get_param_value(hour_data, 'wavePeriod')
-        wave_direction = self.get_param_value(hour_data, 'waveDirection')
-        wind_speed = self.get_param_value(hour_data, 'windSpeed')
-        wind_direction = self.get_param_value(hour_data, 'windDirection')
-        air_temp = self.get_param_value(hour_data, 'airTemperature')
+        # Organize sun data per day
+        sun_by_day = {}
+        for sun in sun_data:
+            dt = datetime.fromisoformat(sun['time'].replace('Z', ''))
+            sun_by_day[dt.date()] = {
+                'sunrise': sun['sunrise'].split('T')[1][:5],
+                'sunset': sun['sunset'].split('T')[1][:5]
+            }
 
-        score = self.calculate_score(wave_height, wave_period, wind_speed, wind_direction, wave_direction)
+        # Score forecasts by day
+        scores_by_day = {}
+        grouped = defaultdict(list)
+        for hour in weather_data:
+            dt = datetime.fromisoformat(hour['time'].replace('Z', ''))
+            grouped[dt.date()].append(hour)
 
-        date_str = datetime.utcnow().strftime('%A, %B %d %Y %H:%M UTC')
-        message = f"""🏄‍♂️ Rest Bay Surf Forecast - {date_str}
+        for day, hours in grouped.items():
+            noon_data = hours[min(range(len(hours)), key=lambda i: abs(datetime.fromisoformat(hours[i]['time'].replace('Z', '')).hour - 12))]
+            wave_height = self.get_param_value(noon_data, 'waveHeight')
+            wave_period = self.get_param_value(noon_data, 'wavePeriod')
+            wave_direction = self.get_param_value(noon_data, 'waveDirection')
+            wind_speed = self.get_param_value(noon_data, 'windSpeed')
+            wind_direction = self.get_param_value(noon_data, 'windDirection')
+            score = self.calculate_score(wave_height, wave_period, wind_speed, wind_direction, wave_direction)
 
-Wave Height: {wave_height:.2f} m
-Wave Period: {wave_period:.1f} s
-Wind Speed: {wind_speed:.1f} m/s
-Wind Direction: {wind_direction:.0f}°
-Wave Direction: {wave_direction:.0f}°
-Air Temperature: {air_temp:.1f}°C
+            scores_by_day[day] = {
+                'score': score,
+                'wave_height': wave_height,
+                'wave_period': wave_period,
+                'wave_direction': wave_direction,
+                'wind_speed': wind_speed,
+                'wind_direction': wind_direction,
+            }
 
-Surf Score: {score:.0f}/100
+        best_day = max(scores_by_day.items(), key=lambda x: x[1]['score'])[0]
+        today_key = today.date()
 
-Check tide times: https://www.bbc.co.uk/weather/coast-and-sea/tide-tables/11/512
-"""
-        await self.notify(message)
+        message = "🏄‍♂️ Surf Forecast - Rest Bay\n"
+
+        if today_key in scores_by_day:
+            message += self.format_day_report(
+                today_key,
+                scores_by_day[today_key],
+                tides_by_day.get(today_key, []),
+                sun_by_day.get(today_key, {'sunrise': 'N/A', 'sunset': 'N/A'})
+            )
+
+        if best_day != today_key:
+            message += "\n🌟 Best Day Forecast:\n"
+            message += self.format_day_report(
+                best_day,
+                scores_by_day[best_day],
+                tides_by_day.get(best_day, []),
+                sun_by_day.get(best_day, {'sunrise': 'N/A', 'sunset': 'N/A'})
+            )
+
+        self.notify(message)
 
 
 if __name__ == "__main__":
-    notifier = SurfNotifier()
-    asyncio.run(notifier.run())
+    SurfNotifier().run()
