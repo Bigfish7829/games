@@ -3,11 +3,14 @@ import requests
 from datetime import datetime
 import logging
 import sys
+import asyncio
 
-from telegram import Bot  # pip install python-telegram-bot
+from telegram import Update
+from telegram.ext import Application
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 class SurfNotifier:
     def __init__(self):
@@ -38,8 +41,7 @@ class SurfNotifier:
         try:
             response = requests.get(url, params=params, headers=headers, timeout=10)
             response.raise_for_status()
-            data = response.json()
-            return data
+            return response.json()
         except Exception as e:
             logger.error(f"Error fetching data from Stormglass: {e}")
             return None
@@ -95,21 +97,22 @@ class SurfNotifier:
 
         return max(0, min(100, score))
 
-    def notify(self, message):
-        bot = Bot(token=self.bot_token)
+    async def notify(self, message):
+        app = Application.builder().token(self.bot_token).build()
         try:
-            bot.send_message(chat_id=self.chat_id, text=message)
+            await app.bot.send_message(chat_id=self.chat_id, text=message)
             logger.info("Notification sent successfully")
         except Exception as e:
             logger.error(f"Failed to send notification: {e}")
+        finally:
+            await app.shutdown()
 
-    def run(self):
+    async def run(self):
         data = self.fetch_data()
         if not data or 'hours' not in data or len(data['hours']) == 0:
             logger.error("No forecast data received")
             return
 
-        # Take the first available hour's data
         hour_data = data['hours'][0]
 
         wave_height = self.get_param_value(hour_data, 'waveHeight')
@@ -135,9 +138,9 @@ Surf Score: {score:.0f}/100
 
 Check tide times: https://www.bbc.co.uk/weather/coast-and-sea/tide-tables/11/512
 """
-        self.notify(message)
+        await self.notify(message)
 
 
 if __name__ == "__main__":
     notifier = SurfNotifier()
-    notifier.run()
+    asyncio.run(notifier.run())
