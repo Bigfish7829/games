@@ -1,6 +1,6 @@
 import os
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import logging
 import sys
@@ -155,7 +155,7 @@ class SurfNotifier:
         # Find low tide within daylight hours
         low_tides = [t for t in tides if t['type'] == 'low']
         low_tide_daylight = [t for t in low_tides
-                             if sunrise_dt <= datetime.fromisoformat(t['time']) <= sunset_dt]
+                             if sunrise_dt <= datetime.fromisoformat(t['time']).replace(tzinfo=ZoneInfo("UTC")).astimezone(UK_TZ) <= sunset_dt]
 
         if not low_tide_daylight:
             return wingfoiling_score  # No low tide during daylight
@@ -181,23 +181,28 @@ class SurfNotifier:
         else:
             wind_speed_knots = 0
 
+        wingfoiling_score = 0
+
         # Wind speed scoring
         if wind_speed_knots > 25:
             wingfoiling_score += 10
         elif wind_speed_knots > 15:
-            wingfoiling_score += 30
+            wingfoiling_score += 40
         elif wind_speed_knots > 12:
-            wingfoiling_score += 20
+            wingfoiling_score += 10
 
         # Wind direction scoring
-        if wind_direction is not None:
+        if wind_direction is not None and wind_speed_knots <= 12:
             if 220 < wind_direction < 230:
                 wingfoiling_score += 50
-            if 180 < wind_direction <= 230:
+            if 200 < wind_direction <= 230:
                 wingfoiling_score += 60
-            if 220 < wind_direction <= 270:
+            if 180 < wind_direction <= 200:
+                wingfoiling_score += 40
+            if 220 < wind_direction <= 250:
                 wingfoiling_score += 60
-
+            if 250 < wind_direction <= 270:
+                wingfoiling_score += 40
         return wingfoiling_score
 
     async def notify(self, message):
@@ -211,7 +216,7 @@ class SurfNotifier:
             await app.shutdown()
 
     async def run(self):
-        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         end = today + timedelta(days=5)
         all_data = self.fetch_weather_data(today, end)
 
@@ -280,7 +285,6 @@ Surf Score: {forecast['score']:.0f}/100
 Wingfoiling Score: {wing_score}/100
 Wave Height: {wave_h:.2f} m
 Wave Period: {wave_p:.1f} s
-Wave Direction: {wave_d:.0f}°
 Wind Speed: {wind_knots:.1f} kt
 Wind Direction: {wind_d:.0f}°
 🌅 Sunrise: {sunrise} | Sunset: {sunset}
