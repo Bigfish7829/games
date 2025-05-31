@@ -1,10 +1,13 @@
 import os
 import requests
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import logging
 import sys
 import asyncio
 from telegram.ext import Application
+
+UK_TZ = ZoneInfo("Europe/London")  # ✅ UK timezone for BST/GMT
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -100,7 +103,7 @@ class SurfNotifier:
             elif wave_period >= 6:
                 score += 15
             else:
-                score += 5
+                score += 0
 
         if wind_speed and wind_direction and wave_direction:
             wind_relative = abs(wind_direction - wave_direction)
@@ -124,7 +127,7 @@ class SurfNotifier:
         return max(0, min(100, score))
 
     def summarise_day(self, date, data):
-        day_hours = [d for d in data if datetime.fromisoformat(d['time']).date() == date.date()]
+        day_hours = [d for d in data if datetime.fromisoformat(d['time']).astimezone(UK_TZ).date() == date.date()]  # ✅ timezone-aware
         if not day_hours:
             return None, None
 
@@ -149,7 +152,7 @@ class SurfNotifier:
             await app.shutdown()
 
     async def run(self):
-        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today = datetime.now(UK_TZ).replace(hour=0, minute=0, second=0, microsecond=0)  # ✅ BST/GMT aware
         end = today + timedelta(days=5)
         all_data = self.fetch_weather_data(today, end)
 
@@ -170,14 +173,14 @@ class SurfNotifier:
 
         # Tide and sun
         tides = self.fetch_tide_data(today)
-        tide_str = "\n".join([f"{t['type'].capitalize()} tide: {datetime.fromisoformat(t['time']).strftime('%H:%M')}"
-                              for t in tides if datetime.fromisoformat(t['time']).date() == today.date()])
+        tide_str = "\n".join([f"{t['type'].capitalize()} tide: {datetime.fromisoformat(t['time']).astimezone(UK_TZ).strftime('%H:%M')}"
+                              for t in tides if datetime.fromisoformat(t['time']).astimezone(UK_TZ).date() == today.date()])  # ✅ BST
 
         sun_data = self.fetch_sun_times(today)
         sunrise = sun_data.get('sunrise')
         sunset = sun_data.get('sunset')
-        if sunrise: sunrise = datetime.fromisoformat(sunrise).strftime('%H:%M')
-        if sunset: sunset = datetime.fromisoformat(sunset).strftime('%H:%M')
+        if sunrise: sunrise = datetime.fromisoformat(sunrise).astimezone(UK_TZ).strftime('%H:%M')  # ✅
+        if sunset: sunset = datetime.fromisoformat(sunset).astimezone(UK_TZ).strftime('%H:%M')    # ✅
 
         def forecast_block(label, score, vals):
             wave_h, wave_p, wave_d, wind_s, wind_d = vals
@@ -188,14 +191,14 @@ Surf Score: {score:.0f}/100
 Wave Height: {wave_h:.2f} m
 Wave Period: {wave_p:.1f} s
 Wave Direction: {wave_d:.0f}°
-Wind Speed: {wind_knots:.1f} kt
 Wind Direction: {wind_d:.0f}°
+Wind Speed: {wind_knots:.1f} kt
 """
 
         message = f"""🏄‍♂️ Rest Bay Surf Forecast - {today.strftime('%A %d %B %Y')}
 
 {forecast_block("Today", today_score, today_vals)}
-{forecast_block(f"Best Day: {best_day[0].strftime('%A')}", best_day[1]['score'], best_day[1]['midday'])}
+{forecast_block(f"Best Day in the next 5: {best_day[0].strftime('%A')}", best_day[1]['score'], best_day[1]['midday'])}
 
 🌅 Sunrise: {sunrise} | Sunset: {sunset}
 🌊 Tide Times:
