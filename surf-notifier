@@ -32,6 +32,7 @@ class SurfNotifier:
             'params': ','.join(self.params),
             'start': start.isoformat(),
             'end': end.isoformat(),
+            'source': 'lotus'
         }
         headers = {'Authorization': self.api_key}
         try:
@@ -41,6 +42,7 @@ class SurfNotifier:
         except Exception as e:
             logger.error(f"Error fetching weather data: {e}")
             return []
+
 
     def fetch_tide_data(self, date):
         url = "https://api.stormglass.io/v2/tide/extremes/point"
@@ -78,10 +80,10 @@ class SurfNotifier:
 
     def get_param_value(self, hour_data, param):
         if param in hour_data and isinstance(hour_data[param], dict):
-            for _, value in hour_data[param].items():
+            for source, value in hour_data[param].items():
                 if value is not None:
-                    return value
-        return None
+                    return value, source
+        return None, None
 
     def calculate_score(self, wave_height, wave_period, wind_speed, wind_direction, wave_direction):
         score = 0
@@ -129,17 +131,26 @@ class SurfNotifier:
     def summarise_day(self, date, data):
         day_hours = [d for d in data if datetime.fromisoformat(d['time']).date() == date.date()]
         if not day_hours:
-            return None, None
-
+            return None, None, None
+    
         scores = []
+        sources_record = {p: None for p in self.params}
         mid_hour = day_hours[len(day_hours) // 2]
+    
         for hour in day_hours:
-            values = [self.get_param_value(hour, p) for p in self.params]
+            values = [self.get_param_value(hour, p)[0] for p in self.params]
             scores.append(self.calculate_score(*values))
-
-        midday_values = [self.get_param_value(mid_hour, p) for p in self.params]
+    
+        midday_values = []
+        for p in self.params:
+            value, source = self.get_param_value(mid_hour, p)
+            midday_values.append(value)
+            if source:
+                sources_record[p] = source
+    
         avg_score = sum(scores) / len(scores)
-        return avg_score, midday_values, day_hours
+        return avg_score, midday_values, sources_record
+
 
     def calculate_wingfoiling_score(self, tides, sun_data, day_hours):
         wingfoiling_score = 0
@@ -253,32 +264,23 @@ class SurfNotifier:
             return "\n".join([f"{t['type'].capitalize()} tide: {datetime.fromisoformat(t['time']).strftime('%H:%M')}"
                               for t in tides])
 
-        def forecast_block(label, forecast):
-            vals = forecast['midday']
-            wave_h, wave_p, wave_d, wind_s, wind_d = vals
-            wind_knots = wind_s * 1.94384 if wind_s is not None else None
+        def forecast_block(label, forecast_data):
+    score, vals, sources = forecast_data
+    wave_h, wave_p, wave_d, wind_s, wind_d = vals
+    wind_knots = wind_s * 1.94384 if wind_s is not None else None
+    model = sources.get('waveHeight', 'unknown')  # assume all wave data used same model
 
-            sun = forecast['sun']
-            sunrise = sun.get('sunrise')
-            sunset = sun.get('sunset')
-            if sunrise: sunrise = datetime.fromisoformat(sunrise).strftime('%H:%M')
-            if sunset: sunset = datetime.fromisoformat(sunset).strftime('%H:%M')
-
-            wing_score = forecast.get('wing_score', 0)
-
-            return f"""
+    return f"""
 🏄‍♂️ {label}
-Surf Score: {forecast['score']:.0f}/100
-Wingfoiling Score: {wing_score}/100
+Model: {model.upper()}
+Surf Score: {score:.0f}/100
 Wave Height: {wave_h:.2f} m
 Wave Period: {wave_p:.1f} s
 Wave Direction: {wave_d:.0f}°
 Wind Speed: {wind_knots:.1f} kt
 Wind Direction: {wind_d:.0f}°
-🌅 Sunrise: {sunrise} | Sunset: {sunset}
-🌊 Tide Times:
-{format_tides(forecast['tides'])}
 """
+
 
         message = f"""🏄‍♂️ Rest Bay Surf & Wingfoil Forecast - {today.strftime('%A %d %B %Y')}
 
