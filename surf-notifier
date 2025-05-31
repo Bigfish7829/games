@@ -43,7 +43,6 @@ class SurfNotifier:
             logger.error(f"Error fetching weather data: {e}")
             return []
 
-
     def fetch_tide_data(self, date):
         url = "https://api.stormglass.io/v2/tide/extremes/point"
         params = {
@@ -131,80 +130,66 @@ class SurfNotifier:
     def summarise_day(self, date, data):
         day_hours = [d for d in data if datetime.fromisoformat(d['time']).date() == date.date()]
         if not day_hours:
-            return None, None, None
-    
+            return None, None, None, []
+
         scores = []
         sources_record = {p: None for p in self.params}
         mid_hour = day_hours[len(day_hours) // 2]
-    
+
         for hour in day_hours:
             values = [self.get_param_value(hour, p)[0] for p in self.params]
             scores.append(self.calculate_score(*values))
-    
+
         midday_values = []
         for p in self.params:
             value, source = self.get_param_value(mid_hour, p)
             midday_values.append(value)
             if source:
                 sources_record[p] = source
-    
-        avg_score = sum(scores) / len(scores)
-        return avg_score, midday_values, sources_record
 
+        avg_score = sum(scores) / len(scores)
+        return avg_score, midday_values, sources_record, day_hours
 
     def calculate_wingfoiling_score(self, tides, sun_data, day_hours):
         wingfoiling_score = 0
 
-        # Parse sunrise and sunset time as datetime
         sunrise = sun_data.get('sunrise')
         sunset = sun_data.get('sunset')
         if not sunrise or not sunset:
-            return wingfoiling_score  # No sun data, no wingfoiling score
+            return wingfoiling_score
         sunrise_dt = datetime.fromisoformat(sunrise)
         sunset_dt = datetime.fromisoformat(sunset)
 
-        # Find low tide within daylight hours
         low_tides = [t for t in tides if t['type'] == 'low']
-        low_tide_daylight = [t for t in low_tides
-                             if sunrise_dt <= datetime.fromisoformat(t['time']) <= sunset_dt]
+        low_tide_daylight = [t for t in low_tides if sunrise_dt <= datetime.fromisoformat(t['time']) <= sunset_dt]
 
         if not low_tide_daylight:
-            return wingfoiling_score  # No low tide during daylight
+            return wingfoiling_score
 
-        # Take earliest low tide during daylight for simplicity
         low_tide = min(low_tide_daylight, key=lambda t: datetime.fromisoformat(t['time']))
         low_tide_time = datetime.fromisoformat(low_tide['time'])
-
-        # Find wind speed 1 hour before low tide
         target_time = low_tide_time - timedelta(hours=1)
 
-        # Find closest hour data to target_time
         closest_hour = min(day_hours, key=lambda h: abs(datetime.fromisoformat(h['time']) - target_time))
 
-        wind_speed = self.get_param_value(closest_hour, 'windSpeed')
-        wind_direction = self.get_param_value(closest_hour, 'windDirection')
+        wind_speed_val, _ = self.get_param_value(closest_hour, 'windSpeed')
+        wind_direction_val, _ = self.get_param_value(closest_hour, 'windDirection')
 
-        # Convert wind speed m/s to knots (1 m/s = 1.94384 knots)
-        if wind_speed is not None:
-            wind_speed_knots = wind_speed * 1.94384
-        else:
-            wind_speed_knots = 0
+        wind_speed_knots = wind_speed_val * 1.94384 if wind_speed_val is not None else 0
 
-        # Wind speed scoring
         if wind_speed_knots > 25:
             wingfoiling_score += 10
         elif wind_speed_knots > 15:
             wingfoiling_score += 30
         elif wind_speed_knots > 12:
-            wingfoiling_score += 20
+            wingfoiling_score += 10
 
-        # Wind direction scoring
-        if wind_direction is not None:
-            if 220 < wind_direction < 230:
+        if wind_direction_val is not None:
+            if 220 < wind_direction_val < 230:
                 wingfoiling_score += 50
-            if 180 < wind_direction <= 230:
+            if 180 < wind_direction_val <= 230:
                 wingfoiling_score += 60
-            if 220 < wind_direction <= 270:
+            if 220 < wind_direction_val <= 270:
                 wingfoiling_score += 60
 
         return wingfoiling_score
@@ -224,7 +209,6 @@ class SurfNotifier:
         end = today + timedelta(days=5)
         all_data = self.fetch_weather_data(today, end)
 
-        # Fetch tide and sun data for each day upfront
         tide_data_by_date = {}
         sun_data_by_date = {}
         for i in range(5):
@@ -235,7 +219,7 @@ class SurfNotifier:
         forecasts = {}
         for i in range(5):
             date = today + timedelta(days=i)
-            avg_score, midday_vals, day_hours = self.summarise_day(date, all_data)
+            avg_score, midday_vals, sources, day_hours = self.summarise_day(date, all_data)
             if avg_score is not None:
                 wing_score = self.calculate_wingfoiling_score(
                     tide_data_by_date.get(date.date(), []),
@@ -246,7 +230,8 @@ class SurfNotifier:
                     'midday': midday_vals,
                     'wing_score': wing_score,
                     'tides': tide_data_by_date.get(date.date(), []),
-                    'sun': sun_data_by_date.get(date.date(), {})
+                    'sun': sun_data_by_date.get(date.date(), {}),
+                    'sources': sources
                 }
 
         if not forecasts:
@@ -258,19 +243,15 @@ class SurfNotifier:
 
         today_forecast = forecasts[today]
 
-        def format_tides(tides):
-            if not tides:
-                return "No tide data"
-            return "\n".join([f"{t['type'].capitalize()} tide: {datetime.fromisoformat(t['time']).strftime('%H:%M')}"
-                              for t in tides])
-
         def forecast_block(label, forecast_data):
-    score, vals, sources = forecast_data
-    wave_h, wave_p, wave_d, wind_s, wind_d = vals
-    wind_knots = wind_s * 1.94384 if wind_s is not None else None
-    model = sources.get('waveHeight', 'unknown')  # assume all wave data used same model
+            score = forecast_data['score']
+            vals = forecast_data['midday']
+            sources = forecast_data['sources']
+            wave_h, wave_p, wave_d, wind_s, wind_d = vals
+            wind_knots = wind_s * 1.94384 if wind_s is not None else None
+            model = sources.get('waveHeight', 'unknown')
 
-    return f"""
+            return f"""
 🏄‍♂️ {label}
 Model: {model.upper()}
 Surf Score: {score:.0f}/100
@@ -281,14 +262,13 @@ Wind Speed: {wind_knots:.1f} kt
 Wind Direction: {wind_d:.0f}°
 """
 
-
-        message = f"""🏄‍♂️ Rest Bay Surf & Wingfoil Forecast - {today.strftime('%A %d %B %Y')}
+        message = f"""\
+🏄‍♂️ Rest Bay Surf & Wingfoil Forecast - {today.strftime('%A %d %B %Y')}
 
 {forecast_block("Today", today_forecast)}
 {forecast_block(f"Best Surf Day in the next 5: {best_surf_day[0].strftime('%A')}", best_surf_day[1])}
 {forecast_block(f"Best Wingfoil Day in the next 5: {best_wing_day[0].strftime('%A')}", best_wing_day[1])}
 Check it out here: https://www.surfline.com/surf-report/rest-bay/584204204e65fad6a77090d2?camId=5a21a9cff20eb500195b40ca&view=table
-
 """
         await self.notify(message.strip())
 
