@@ -192,7 +192,7 @@ class SurfNotifier:
             wingfoiling_score += 10
 
         # Wind direction scoring
-        if wind_direction is not None and wind_speed_knots <= 12:
+        if wind_direction is not None and wind_speed_knots >= 12:
             if 220 < wind_direction < 230:
                 wingfoiling_score += 50
             if 200 < wind_direction <= 230:
