@@ -7,6 +7,8 @@ import sys
 import asyncio
 from telegram.ext import Application
 
+# import keys
+
 UK_TZ = ZoneInfo("Europe/London")
 
 logging.basicConfig(level=logging.INFO)
@@ -14,10 +16,13 @@ logger = logging.getLogger(__name__)
 
 class SurfNotifier:
     def __init__(self):
+        # self.api_key = keys.STORMGLASS_API_KEY
         self.api_key = os.getenv('STORMGLASS_API_KEY')
         self.lat = 51.4854
         self.lng = -3.7031
         self.params = ['waveHeight', 'wavePeriod', 'waveDirection', 'windSpeed', 'windDirection']
+        # self.bot_token = keys.TELEGRAM_TOKEN
+        # self.chat_id = keys.TELEGRAM_CHAT_ID
         self.bot_token = os.getenv('TELEGRAM_TOKEN')
         self.chat_id = os.getenv('TELEGRAM_CHAT_ID')
         if not all([self.api_key, self.bot_token, self.chat_id]):
@@ -42,13 +47,13 @@ class SurfNotifier:
             logger.error(f"Error fetching weather data: {e}")
             return []
 
-    def fetch_tide_data(self, date):
+    def fetch_tide_data(self, start, end):
         url = "https://api.stormglass.io/v2/tide/extremes/point"
         params = {
             'lat': self.lat,
             'lng': self.lng,
-            'start': date.isoformat(),
-            'end': (date + timedelta(days=1)).isoformat()
+            'start': start.isoformat(),
+            'end': end.isoformat(),
         }
         headers = {'Authorization': self.api_key}
         try:
@@ -59,22 +64,22 @@ class SurfNotifier:
             logger.error(f"Error fetching tide data: {e}")
             return []
 
-    def fetch_sun_times(self, date):
+    def fetch_sun_times(self, start, end):
         url = "https://api.stormglass.io/v2/astronomy/point"
         params = {
             'lat': self.lat,
             'lng': self.lng,
-            'start': date.isoformat(),
-            'end': (date + timedelta(days=1)).isoformat()
+            'start': start.isoformat(),
+            'end': end.isoformat(),
         }
         headers = {'Authorization': self.api_key}
         try:
             response = requests.get(url, params=params, headers=headers)
             response.raise_for_status()
-            return response.json().get('data', [])[0]
+            return response.json().get('data', [])
         except Exception as e:
             logger.error(f"Error fetching sun data: {e}")
-            return {}
+            return []
 
     def get_param_value(self, hour_data, param):
         if param in hour_data and isinstance(hour_data[param], dict):
@@ -126,10 +131,9 @@ class SurfNotifier:
 
         return max(0, min(100, score))
 
-    def summarise_day(self, date, data):
-        day_hours = [d for d in data if datetime.fromisoformat(d['time']).date() == date.date()]
+    def summarise_day(self, date, day_hours):
         if not day_hours:
-            return None, None
+            return None, None, []
 
         scores = []
         mid_hour = day_hours[len(day_hours) // 2]
@@ -142,68 +146,51 @@ class SurfNotifier:
         return avg_score, midday_values, day_hours
 
     def calculate_wingfoiling_score(self, tides, sun_data, day_hours):
-        wingfoiling_score = 0
+        if not sun_data or not tides or not day_hours:
+            return 0
 
-        # Parse sunrise and sunset time as datetime
         sunrise = sun_data.get('sunrise')
         sunset = sun_data.get('sunset')
         if not sunrise or not sunset:
-            return wingfoiling_score  # No sun data, no wingfoiling score
+            return 0
         sunrise_dt = datetime.fromisoformat(sunrise)
         sunset_dt = datetime.fromisoformat(sunset)
 
-        # Find low tide within daylight hours
         low_tides = [t for t in tides if t['type'] == 'low']
         low_tide_daylight = [t for t in low_tides
                              if sunrise_dt <= datetime.fromisoformat(t['time']).replace(tzinfo=ZoneInfo("UTC")).astimezone(UK_TZ) <= sunset_dt]
-
         if not low_tide_daylight:
-            return wingfoiling_score  # No low tide during daylight
+            return 0
 
-        # Take earliest low tide during daylight for simplicity
-        low_tide = min(
-        low_tide_daylight,
-        key=lambda t: datetime.fromisoformat(t['time']).replace(tzinfo=ZoneInfo("UTC")).astimezone(UK_TZ))
-        low_tide_time = datetime.fromisoformat(low_tide['time']).replace(tzinfo=ZoneInfo("UTC")).astimezone(UK_TZ)
+        low_tide_time = min(low_tide_daylight, key=lambda t: datetime.fromisoformat(t['time']).replace(tzinfo=ZoneInfo("UTC")).astimezone(UK_TZ))
+        target_time = datetime.fromisoformat(low_tide_time['time']).replace(tzinfo=ZoneInfo("UTC")).astimezone(UK_TZ) - timedelta(hours=1)
 
-        # Find wind speed 1 hour before low tide
-        target_time = low_tide_time - timedelta(hours=1)
-
-        # Find closest hour data to target_time
-        closest_hour = min(day_hours, key=lambda h: abs(datetime.fromisoformat(h['time']) - target_time))
-
+        closest_hour = min(day_hours, key=lambda h: abs(datetime.fromisoformat(h['time']).astimezone(UK_TZ) - target_time))
         wind_speed = self.get_param_value(closest_hour, 'windSpeed')
         wind_direction = self.get_param_value(closest_hour, 'windDirection')
 
-        # Convert wind speed m/s to knots (1 m/s = 1.94384 knots)
-        if wind_speed is not None:
-            wind_speed_knots = wind_speed * 1.94384
-        else:
-            wind_speed_knots = 0
+        wind_speed_knots = wind_speed * 1.94384 if wind_speed is not None else 0
+        score = 0
 
-        wingfoiling_score = 0
-
-        # Wind speed scoring
         if wind_speed_knots > 25:
-            wingfoiling_score += 10
+            score += 10
         elif wind_speed_knots > 15:
-            wingfoiling_score += 40
+            score += 40
         elif wind_speed_knots > 12:
-            wingfoiling_score += 10
+            score += 10
 
-        # Wind direction scoring
         if wind_direction is not None and wind_speed_knots >= 12:
             if 220 < wind_direction < 230:
-                wingfoiling_score += 50
+                score += 50
             if 200 < wind_direction <= 230:
-                wingfoiling_score += 60
+                score += 60
             if 180 < wind_direction <= 200:
-                wingfoiling_score += 40
+                score += 40
             if 220 < wind_direction <= 250:
-                wingfoiling_score += 60
+                score += 60
             if 250 < wind_direction <= 270:
-                wingfoiling_score += 40
-        return wingfoiling_score
+                score += 40
+        return score
 
     async def notify(self, message):
         app = Application.builder().token(self.bot_token).build()
@@ -218,31 +205,42 @@ class SurfNotifier:
     async def run(self):
         today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         end = today + timedelta(days=5)
-        all_data = self.fetch_weather_data(today, end)
 
-        # Fetch tide and sun data for each day upfront
-        tide_data_by_date = {}
-        sun_data_by_date = {}
-        for i in range(5):
-            date = today + timedelta(days=i)
-            tide_data_by_date[date.date()] = self.fetch_tide_data(date)
-            sun_data_by_date[date.date()] = self.fetch_sun_times(date)
+        raw_weather = self.fetch_weather_data(today, end)
+        raw_tides = self.fetch_tide_data(today, end)
+        raw_sun = self.fetch_sun_times(today, end)
+
+        grouped_weather = {}
+        for hour in raw_weather:
+            date_str = datetime.fromisoformat(hour['time']).astimezone(UK_TZ).strftime('%Y-%m-%d')
+            grouped_weather.setdefault(date_str, []).append(hour)
+
+        grouped_tides = {}
+        for tide in raw_tides:
+            date_str = datetime.fromisoformat(tide['time']).astimezone(UK_TZ).strftime('%Y-%m-%d')
+            grouped_tides.setdefault(date_str, []).append(tide)
+
+        grouped_sun = {}
+        for sun in raw_sun:
+            date_str = datetime.fromisoformat(sun['time']).astimezone(UK_TZ).strftime('%Y-%m-%d')
+            grouped_sun[date_str] = sun
 
         forecasts = {}
-        for i in range(5):
+        for i in range(6):
             date = today + timedelta(days=i)
-            avg_score, midday_vals, day_hours = self.summarise_day(date, all_data)
+            date_str = date.astimezone(UK_TZ).strftime('%Y-%m-%d')
+            weather = grouped_weather.get(date_str, [])
+            tide = grouped_tides.get(date_str, [])
+            sun = grouped_sun.get(date_str, {})
+            avg_score, midday_vals, day_hours = self.summarise_day(date, weather)
             if avg_score is not None:
-                wing_score = self.calculate_wingfoiling_score(
-                    tide_data_by_date.get(date.date(), []),
-                    sun_data_by_date.get(date.date(), {}),
-                    day_hours)
-                forecasts[date] = {
+                wing_score = self.calculate_wingfoiling_score(tide, sun, day_hours)
+                forecasts[date_str] = {
                     'score': avg_score,
                     'midday': midday_vals,
                     'wing_score': wing_score,
-                    'tides': tide_data_by_date.get(date.date(), []),
-                    'sun': sun_data_by_date.get(date.date(), {})
+                    'tides': tide,
+                    'sun': sun
                 }
 
         if not forecasts:
@@ -252,7 +250,8 @@ class SurfNotifier:
         best_surf_day = max(forecasts.items(), key=lambda kv: kv[1]['score'])
         best_wing_day = max(forecasts.items(), key=lambda kv: kv[1]['wing_score'])
 
-        today_forecast = forecasts[today]
+        today_str = today.astimezone(UK_TZ).strftime('%Y-%m-%d')
+        today_forecast = forecasts[today_str]
 
         def format_tides(tides):
             if not tides:
@@ -261,7 +260,6 @@ class SurfNotifier:
                 f"{t['type'].capitalize()} tide: {datetime.fromisoformat(t['time']).astimezone(UK_TZ).strftime('%H:%M')}"
                 for t in tides
             ])
-
 
         def forecast_block(label, forecast):
             vals = forecast['midday']
@@ -275,7 +273,6 @@ class SurfNotifier:
                 sunrise = datetime.fromisoformat(sunrise).astimezone(UK_TZ).strftime('%H:%M')
             if sunset:
                 sunset = datetime.fromisoformat(sunset).astimezone(UK_TZ).strftime('%H:%M')
-
 
             wing_score = forecast.get('wing_score', 0)
 
@@ -292,13 +289,22 @@ Wind Direction: {wind_d:.0f}°
 {format_tides(forecast['tides'])}
 """
 
+        five_day_summary = ""
+        for i in range(1, 6):
+            date = today + timedelta(days=i)
+            date_str = date.strftime('%Y-%m-%d')
+            forecast = forecasts.get(date_str)
+            if forecast:
+                five_day_summary += f"{date.strftime('%A')}: Surf Score: {forecast['score']:.0f}/100, Wing Score: {forecast['wing_score']}/100\n"
+
         message = f"""🏄‍♂️ Rest Bay Surf & Wingfoil Forecast - {today.strftime('%A %d %B %Y')}
 
 {forecast_block("Today", today_forecast)}
-{forecast_block(f"Best Surf Day in the next 5: {best_surf_day[0].strftime('%A')}", best_surf_day[1])}
-{forecast_block(f"Best Wingfoil Day in the next 5: {best_wing_day[0].strftime('%A')}", best_wing_day[1])}
-Check it out here: https://www.surfline.com/surf-report/rest-bay/584204204e65fad6a77090d2?camId=5a21a9cff20eb500195b40ca&view=table
+{five_day_summary}
+{forecast_block(f"Best Surf Day: {datetime.fromisoformat(best_surf_day[0]).strftime('%A')}", best_surf_day[1])}
+{forecast_block(f"Best Wingfoil Day: {datetime.fromisoformat(best_wing_day[0]).strftime('%A')}", best_wing_day[1])}
 
+Check it out here: https://www.surfline.com/surf-report/rest-bay/584204204e65fad6a77090d2?camId=5a21a9cff20eb500195b40ca&view=table
 """
         await self.notify(message.strip())
 
