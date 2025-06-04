@@ -8,7 +8,7 @@ import asyncio
 from telegram.ext import Application
 
 
-# import keys
+#import keys
 
 UK_TZ = ZoneInfo("Europe/London")
 
@@ -17,21 +17,25 @@ logger = logging.getLogger(__name__)
 
 class SurfNotifier:
     def __init__(self):
-        # self.api_key = keys.STORMGLASS_API_KEY
+        #self.api_key = keys.STORMGLASS_API_KEY
         self.api_key = os.getenv('STORMGLASS_API_KEY')
         self.lat = 51.4854
         self.lng = -3.7031
         self.params = ['waveHeight', 'wavePeriod', 'waveDirection', 'windSpeed', 'windDirection']
-        # self.bot_token = keys.TELEGRAM_TOKEN
-        # self.chat_id = keys.TELEGRAM_CHAT_ID
+        #self.bot_token = keys.TELEGRAM_TOKEN
+        #self.chat_id = keys.TELEGRAM_CHAT_ID
         self.bot_token = os.getenv('TELEGRAM_TOKEN')
         self.chat_id = os.getenv('TELEGRAM_CHAT_ID')
         if not all([self.api_key, self.bot_token, self.chat_id]):
             logger.error("Missing required environment variables: STORMGLASS_API_KEY, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID")
             sys.exit(1)
 
-    def fetch_weather_data(self, start, end):
+    def fetch_weather_data(self, start, end, location):
         url = "https://api.stormglass.io/v2/weather/point"
+        if location == 'porthcawl':
+            self.lat, self.lng = 51.4854, -3.7031
+        elif location == 'knap':
+            self.lat, self.lng = 51.3902, -3.2953
         params = {
             'lat': self.lat,
             'lng': self.lng,
@@ -134,37 +138,36 @@ class SurfNotifier:
 
         return max(0, min(100, score))
 
-    def summarise_day(self, date, day_hours, sun_data):
-        if not day_hours:
+    def summarise_day_surf(self, hourly_weather_data, sun_data):
+        if not hourly_weather_data:
             return None, None, []
 
         scores = []
-        mid_hour = day_hours[len(day_hours) // 2]
         # only consider hours between sunrise and sunset
         sunrise = datetime.fromisoformat(sun_data.get('sunrise')).astimezone(UK_TZ)
         sunset = datetime.fromisoformat(sun_data.get('sunset')).astimezone(UK_TZ)
-        day_hours = [h for h in day_hours if sunrise <= datetime.fromisoformat(h['time']).astimezone(UK_TZ) <= sunset]
+        hourly_weather_data = [h for h in hourly_weather_data if sunrise <= datetime.fromisoformat(h['time']).astimezone(UK_TZ) <= sunset]
 
-        for hour in day_hours:
+        for hour in hourly_weather_data:
             values = [self.get_param_value(hour, p) for p in self.params]
             scores.append(self.calculate_score(*values))
 
         # find the best 3 hour window in the day and return the average score of that 3 hour window
         best_3h_score = -1
         best_3h_time = None
-        for i in range(len(day_hours) - 2):
+        for i in range(len(hourly_weather_data) - 2):
             window_scores = scores[i:i + 3]
             avg_score = sum(window_scores) / len(window_scores)
             if avg_score > best_3h_score:
                 best_3h_score = avg_score
-                best_3h_time = day_hours[i + 1]
+                best_3h_time = hourly_weather_data[i + 1]
 
         # get midday values for the best 3 hour window
         if best_3h_time is None:
             return None, None, [], None
         best_3h_values = [self.get_param_value(best_3h_time, p) for p in self.params]
 
-        return best_3h_score, best_3h_values, day_hours, best_3h_time['time']
+        return best_3h_score, best_3h_values, hourly_weather_data, best_3h_time['time']
 
     def calculate_wingfoiling_score(self, tides, sun_data, day_hours):
         if not sun_data or not tides or not day_hours:
@@ -231,32 +234,60 @@ class SurfNotifier:
         finally:
             await app.shutdown()
 
+    def get_surf_forecast(self, date, weather_surf, sun):
+        best_3hr_score, best_3hr_values, day_hours, best_hour = self.summarise_day_surf(weather_surf, sun)
+        return {
+            'score': best_3hr_score,
+            'best_3h_values': best_3hr_values,
+            'best_time': best_hour,
+            'day_hours': day_hours
+        }
+
+    def get_wingfoil_forecast(self, tide, sun, weather_wing):
+        wing_score, wind_speed_knots, wind_direction, launch_hour = self.calculate_wingfoiling_score(
+            tide, sun, weather_wing
+        )
+        return {
+            'wing_score': wing_score,
+            'wing_wind_speed_knots': wind_speed_knots,
+            'wing_wind_direction': wind_direction,
+            'wing_launch_time': launch_hour
+        }
+
     async def run(self):
         today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         end = today + timedelta(days=5)
 
-        import ast
+        #import ast
 
-        # with open('/Users/jackpreece/PycharmProjects/personal_scripts/raw_weather_log', 'r') as f:
-            # raw_weather_data = ast.literal_eval(f.read())
-        # with open('/Users/jackpreece/PycharmProjects/personal_scripts/raw_tides_log', 'r') as f:
-            # raw_tides_data = ast.literal_eval(f.read())
-        # with open('/Users/jackpreece/PycharmProjects/personal_scripts/raw_sun_log', 'r') as f:
-            # raw_sun_data = ast.literal_eval(f.read())
+        #with open('/Users/jackpreece/PycharmProjects/personal_scripts/raw_weather_log', 'r') as f:
+          #  raw_weather_data_porthcawl = ast.literal_eval(f.read())
+       # with open('/Users/jackpreece/PycharmProjects/personal_scripts/raw_weather_log', 'r') as f:
+        #    raw_weather_data_knap= ast.literal_eval(f.read())
+       # with open('/Users/jackpreece/PycharmProjects/personal_scripts/raw_tides_log', 'r') as f:
+         #   raw_tides_data = ast.literal_eval(f.read())
+       # with open('/Users/jackpreece/PycharmProjects/personal_scripts/raw_sun_log', 'r') as f:
+        #    raw_sun_data = ast.literal_eval(f.read())
 
-        raw_weather_data = self.fetch_weather_data(today, end)
+        raw_weather_data_porthcawl = self.fetch_weather_data(today, end,"porthcawl")
+        raw_weather_data_knap = self.fetch_weather_data(today, end, "knap")
         raw_tides_data = self.fetch_tide_data(today, end)
         raw_sun_data = self.fetch_sun_times(today, end)
 
-
-        raw_weather = raw_weather_data
+        raw_weather_porthcawl = raw_weather_data_porthcawl
+        raw_weather_knap = raw_weather_data_knap
         raw_tides = raw_tides_data
         raw_sun = raw_sun_data
 
-        grouped_weather = {}
-        for hour in raw_weather:
+        grouped_weather_porthcawl = {}
+        for hour in raw_weather_porthcawl:
             date_str = datetime.fromisoformat(hour['time']).astimezone(UK_TZ).strftime('%Y-%m-%d')
-            grouped_weather.setdefault(date_str, []).append(hour)
+            grouped_weather_porthcawl.setdefault(date_str, []).append(hour)
+
+        grouped_weather_knap = {}
+        for hour in raw_weather_knap:
+            date_str = datetime.fromisoformat(hour['time']).astimezone(UK_TZ).strftime('%Y-%m-%d')
+            grouped_weather_knap.setdefault(date_str, []).append(hour)
 
         grouped_tides = {}
         for tide in raw_tides:
@@ -269,25 +300,23 @@ class SurfNotifier:
             grouped_sun[date_str] = sun
 
         forecasts = {}
-        for i in range(5):
+        for i, date_str in enumerate(grouped_weather_porthcawl):
+            # use i and date_str
             date = today + timedelta(days=i)
             date_str = date.astimezone(UK_TZ).strftime('%Y-%m-%d')
-            weather = grouped_weather.get(date_str, [])
+
+            weather_surf = grouped_weather_porthcawl.get(date_str, [])
+            weather_wing = grouped_weather_knap.get(date_str, [])
+
             tide = grouped_tides.get(date_str, [])
             sun = grouped_sun.get(date_str, {})
 
-            best_3hr_score, best_3hr_values, day_hours, best_hour = self.summarise_day(date, weather, sun)
-
-            if best_3hr_score is not None:
-                wing_score, wind_speed_knots, wind_direction, launch_hour = self.calculate_wingfoiling_score(tide, sun, day_hours)
+            surf = self.get_surf_forecast(date, weather_surf, sun)
+            wing = self.get_wingfoil_forecast(tide, sun, weather_wing)
+            if surf and wing:
                 forecasts[date_str] = {
-                    'score': best_3hr_score,
-                    'best_3h_values': best_3hr_values,
-                    'best_time': best_hour,
-                    'wing_score': wing_score,
-                    'wing_wind_speed_knots': wind_speed_knots,
-                    'wing_wind_direction': wind_direction,
-                    'wing_launch_time': launch_hour,
+                    **surf,
+                    **wing,
                     'tides': tide,
                     'sun': sun
                 }
@@ -317,15 +346,16 @@ class SurfNotifier:
             tides = sorted(tides, key=lambda t: datetime.fromisoformat(t['time']).astimezone(UK_TZ))
 
             return "\n".join(
-                f"{datetime.fromisoformat(t['time']).astimezone(UK_TZ).strftime('%H:%M')} - {t['type'].capitalize()} ({t['height']:.2f} m)"
+                f"{datetime.fromisoformat(t['time']).astimezone(UK_TZ).strftime('%H:%M')} - {t['type'].capitalize()} m)"
                 for t in tides
             )
 
         def forecast_block(label, forecast):
-            vals = forecast['best_3h_values']
-            wave_h, wave_p, wave_d, wind_s, wind_d = vals
-            wind_knots = wind_s * 1.94384 if wind_s is not None else None
-            best_hour = datetime.fromisoformat(forecast['best_time']).astimezone(UK_TZ).strftime('%H:%M')
+            # Surf
+            surf_vals = forecast['best_3h_values']
+            wave_h, wave_p, wave_d, wind_s, wind_d = surf_vals
+            wind_knots_surf = wind_s * 1.94384 if wind_s is not None else None
+            best_hour_surf = datetime.fromisoformat(forecast['best_time']).astimezone(UK_TZ).strftime('%H:%M')
             sun = forecast['sun']
             sunrise = sun.get('sunrise')
             sunset = sun.get('sunset')
@@ -333,17 +363,17 @@ class SurfNotifier:
                 sunrise_formatted = datetime.fromisoformat(sunrise).astimezone(UK_TZ).strftime('%H:%M')
             if sunset:
                 sunset_formatted = datetime.fromisoformat(sunset).astimezone(UK_TZ).strftime('%H:%M')
-
+            # Wing
             wing_score = forecast.get('wing_score', 0)
-
             wing_wind_speed_knots = forecast.get('wing_wind_speed_knots')
             wing_wind_direction = forecast.get('wing_wind_direction')
             launch_hour = forecast.get('wing_launch_time').strftime('%H:%M')
 
             if "Wing" in label:
                 return f"""
-🏄‍♂️ {label}
-Wingfoiling Score: {wing_score}/100
+                
+🪂 {label}
+Wingfoiling Score for the Knap: {wing_score}/100
     Wind Speed: {wing_wind_speed_knots:.1f} kt
     Wind Direction: {wing_wind_direction:.0f}°
     Knap Launch Time: {launch_hour}
@@ -357,8 +387,8 @@ Wingfoiling Score: {wing_score}/100
 Surf Score: {forecast['score']:.0f}/100
     Wave Height: {wave_h:.2f} m
     Wave Period: {wave_p:.1f} s
-    Best time to surf: {best_hour}
-    Wind Speed: {wind_knots:.1f} kt
+    Best time to surf: {best_hour_surf}
+    Wind Speed: {wind_knots_surf:.1f} kt
     Wind Direction: {wind_d:.0f}°
     🌅 Sunrise: {sunrise_formatted} | Sunset: {sunset_formatted}
     🌊 Tide Times:
@@ -366,13 +396,13 @@ Surf Score: {forecast['score']:.0f}/100
 """
             else:
                 return f"""
-🏄‍♂️ {label}
+🏄‍♂️🪂 {label}
 Surf Score: {forecast['score']:.0f}/100
 Wingfoiling Score: {wing_score}/100
     Wave Height: {wave_h:.2f} m
     Wave Period: {wave_p:.1f} s
-    Best time to surf: {best_hour}
-    Wind Speed: {wind_knots:.1f} kt
+    Best time to surf: {best_hour_surf}
+    Wind Speed: {wind_knots_surf:.1f} kt
     Wind Direction: {wind_d:.0f}°
     Knap Launch Time: {launch_hour}
     Wing Wind Speed: {wing_wind_speed_knots:.1f} kt
@@ -390,10 +420,11 @@ Wingfoiling Score: {wing_score}/100
             if forecast:
                 five_day_summary += f"{date.strftime('%a')}: Surf Score: {forecast['score']:.0f}, Wing Score: {forecast['wing_score']}\n"
 
-        message = f"""🏄‍♂️ Rest Bay Surf & Wingfoil Forecast - {today.strftime('%A %d %B %Y')}
+        message = f"""Rest Bay Surf & The Knap Wingfoil Forecast - {today.strftime('%A %d %B %Y')}
 
-{forecast_block("Today", today_forecast)}
+🏄‍♂️🪂Five Day Summary:
 {five_day_summary}
+{forecast_block("Today", today_forecast)}
 {forecast_block(f"Best Surf Day: {datetime.fromisoformat(best_surf_day[0]).strftime('%A')}", best_surf_day[1])}
 {forecast_block(f"Best Wingfoil Day: {datetime.fromisoformat(best_wing_day[0]).strftime('%A')}", best_wing_day[1])}
 
