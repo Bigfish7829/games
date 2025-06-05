@@ -300,7 +300,7 @@ class SurfNotifier:
             grouped_sun[date_str] = sun
 
         forecasts = {}
-        for i range(5):
+        for i in range(5):
             # use i and date_str
             date = today + timedelta(days=i)
             date_str = date.astimezone(UK_TZ).strftime('%Y-%m-%d')
