@@ -211,7 +211,7 @@ class SurfNotifier:
         elif wind_speed_knots > 12:
             score += 10
 
-        if wind_direction is not None and wind_speed_knots >= 12:
+        if wind_direction is not None and wind_speed_knots >= 10:
             if 220 < wind_direction < 230:
                 score += 50
             if 200 < wind_direction <= 230:
@@ -256,7 +256,8 @@ class SurfNotifier:
 
     async def run(self):
         today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-        end = today + timedelta(days=5)
+        tomorrow = today + timedelta(days=1)
+        end = tomorrow + timedelta(days=5)
 
         #import ast
 
@@ -269,10 +270,10 @@ class SurfNotifier:
        # with open('/Users/jackpreece/PycharmProjects/personal_scripts/raw_sun_log', 'r') as f:
         #    raw_sun_data = ast.literal_eval(f.read())
 
-        raw_weather_data_porthcawl = self.fetch_weather_data(today, end,"porthcawl")
-        raw_weather_data_knap = self.fetch_weather_data(today, end, "knap")
-        raw_tides_data = self.fetch_tide_data(today, end)
-        raw_sun_data = self.fetch_sun_times(today, end)
+        raw_weather_data_porthcawl = self.fetch_weather_data(tomorrow, end,"porthcawl")
+        raw_weather_data_knap = self.fetch_weather_data(tomorrow, end, "knap")
+        raw_tides_data = self.fetch_tide_data(tomorrow, end)
+        raw_sun_data = self.fetch_sun_times(tomorrow, end)
 
         raw_weather_porthcawl = raw_weather_data_porthcawl
         raw_weather_knap = raw_weather_data_knap
@@ -302,7 +303,7 @@ class SurfNotifier:
         forecasts = {}
         for i in range(5):
             # use i and date_str
-            date = today + timedelta(days=i)
+            date = tomorrow + timedelta(days=i)
             date_str = date.astimezone(UK_TZ).strftime('%Y-%m-%d')
 
             weather_surf = grouped_weather_porthcawl.get(date_str, [])
@@ -328,8 +329,8 @@ class SurfNotifier:
         best_surf_day = max(forecasts.items(), key=lambda kv: kv[1]['score'])
         best_wing_day = max(forecasts.items(), key=lambda kv: kv[1]['wing_score'])
 
-        today_str = today.astimezone(UK_TZ).strftime('%Y-%m-%d')
-        today_forecast = forecasts[today_str]
+        tomorrow_str = tomorrow.astimezone(UK_TZ).strftime('%Y-%m-%d')
+        tomorrow_forecast = forecasts[tomorrow_str]
 
         def format_tides(tides, sunrise, sunset):
             if not tides:
@@ -414,17 +415,17 @@ Wingfoiling Score: {wing_score}/100
 
         five_day_summary = ""
         for i in range(1, 6):
-            date = today + timedelta(days=i)
+            date = tomorrow + timedelta(days=i)
             date_str = date.strftime('%Y-%m-%d')
             forecast = forecasts.get(date_str)
             if forecast:
                 five_day_summary += f"{date.strftime('%a')}: Surf Score: {forecast['score']:.0f}, Wing Score: {forecast['wing_score']}\n"
 
-        message = f"""Rest Bay Surf & The Knap Wingfoil Forecast - {today.strftime('%A %d %B %Y')}
+        message = f"""Rest Bay Surf & The Knap Wingfoil Forecast - {tomorrow.strftime('%A %d %B %Y')}
 
 🏄‍♂️🪂Five Day Summary:
 {five_day_summary}
-{forecast_block("Today", today_forecast)}
+{forecast_block("Tomorrow", tomorrow_forecast)}
 {forecast_block(f"Best Surf Day: {datetime.fromisoformat(best_surf_day[0]).strftime('%A')}", best_surf_day[1])}
 {forecast_block(f"Best Wingfoil Day: {datetime.fromisoformat(best_wing_day[0]).strftime('%A')}", best_wing_day[1])}
 
